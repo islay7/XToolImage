@@ -295,7 +295,8 @@ bool TestTifImage(std::string file_in, std::string file_out)
     nbSample = 3;
     nbBits = 8;
   }
-
+  if ((nbSample == 1) && (nbBits == 1)) // Images 1 bit -> conversion en 8 bits
+    nbBits = 8;
 
   tiff.Write(file_out.c_str(), W, H, nbSample, nbBits, area);
 
