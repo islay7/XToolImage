@@ -2,12 +2,13 @@
 //
 
 #include <iostream>
-#include "XJp2Image.h"
+//#include "XJp2Image.h"
 #include "../XTool/XTiffWriter.h"
 #include "XTiffTileImage.h"
 #include "XTiffStripImage.h"
 #include "XDtmShader.h"
 
+/*
 int TestJP2()
 {
   std::string filename;
@@ -38,7 +39,7 @@ int TestJP2()
   delete image;
   return 0;
 }
-
+*/
 void TestTif()
 {
   std::string filename;
