@@ -11,6 +11,7 @@
 
 #include "XDtmShader.h"
 #include <cmath>
+#include <cstring>
 
 // Preferences d'affichage
 double XDtmShader::m_dNoData = -999.;
@@ -41,14 +42,14 @@ void XDtmShader::SetPref32Bits(double nodata, double z0, double z1, double z2,
 void XDtmShader::SetCol32Bits(byte* Color, bool set)
 {
   if (set) {
-    memcpy(m_HZColor, Color, 3 * sizeof(byte));
-    memcpy(m_Z0Color, &Color[3], 3 * sizeof(byte));
-    memcpy(m_ZColor, &Color[6], 15 * sizeof(byte));
+    ::memcpy(m_HZColor, Color, 3 * sizeof(byte));
+    ::memcpy(m_Z0Color, &Color[3], 3 * sizeof(byte));
+    ::memcpy(m_ZColor, &Color[6], 15 * sizeof(byte));
   }
   else {
-    memcpy(Color, m_HZColor, 3 * sizeof(byte));
-    memcpy(&Color[3], m_Z0Color, 3 * sizeof(byte));
-    memcpy(&Color[6], m_ZColor, 15 * sizeof(byte));
+    ::memcpy(Color, m_HZColor, 3 * sizeof(byte));
+    ::memcpy(&Color[3], m_Z0Color, 3 * sizeof(byte));
+    ::memcpy(&Color[6], m_ZColor, 15 * sizeof(byte));
   }
 }
 
@@ -129,9 +130,9 @@ double XDtmShader::CoefPente(float altC, float altH, float altD)
 int XDtmShader::Isohypse(float altC, float altH, float altD)
 {
   double step = m_dZ1 - m_dZ0;
-  int nb_isoC = ceil(altC / step);
-  int nb_isoH = ceil(altH / step);
-  int nb_isoD = ceil(altD / step);
+  int nb_isoC = (int)ceil(altC / step);
+  int nb_isoH = (int)ceil(altH / step);
+  int nb_isoD = (int)ceil(altD / step);
   int nb_iso = XRint(altC / step);
 
   if (nb_isoC != nb_isoH)
@@ -148,7 +149,8 @@ int XDtmShader::Isohypse(float altC, float altH, float altD)
 bool XDtmShader::EstompLine(float* lineR, float* lineS, float* lineT, uint32 W, byte* rgb, uint32 num)
 {
   float* ptr = lineS;
-  double coef, r, g, b, val;
+  double coef = 1., r, g, b;
+  float val;
   int index = 0, nb_iso;
   for (uint32 i = 0; i < W; i++) {
     val = *ptr;
@@ -288,9 +290,9 @@ bool XDtmShader::EstompLine(float* lineR, float* lineS, float* lineT, uint32 W, 
           b = m_ZColor[index + 2];
         }
         else {
-          r = m_Z0Color[index];
-          g = m_Z0Color[index + 1];
-          b = m_Z0Color[index + 2];
+          r = m_Z0Color[0];
+          g = m_Z0Color[1];
+          b = m_Z0Color[2];
         }
       }
 
@@ -311,9 +313,9 @@ bool XDtmShader::EstompLine(float* lineR, float* lineS, float* lineT, uint32 W, 
       break;
     }
 
-    rgb[3 * i] = r * coef;
-    rgb[3 * i + 1] = g * coef;
-    rgb[3 * i + 2] = b * coef;
+    rgb[3 * i] = XRint(r * coef);
+    rgb[3 * i + 1] = XRint(g * coef);
+    rgb[3 * i + 2] = XRint(b * coef);
     ptr++;
   }
 

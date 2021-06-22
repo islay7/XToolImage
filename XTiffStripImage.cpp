@@ -7,6 +7,7 @@
 // Date : 15/06/2021
 //-----------------------------------------------------------------------------
 
+#include <cstring>
 #include "XTiffStripImage.h"
 #include "XLzwCodec.h"
 #include "XZlibCodec.h"
@@ -297,8 +298,63 @@ bool XTiffStripImage::CopyStrip(uint32 numStrip, uint32 x, uint32 y, uint32 w, u
 	for (uint32 i = 0; i < nbline; i++) {
 		byte* source = &m_Strip[((i + startY) * m_nW + x) * m_nPixSize];
 		byte* dest = &area[(Y0 * w + i * w) * m_nPixSize];
-		std::memcpy(dest, source, lineSize);
+		::memcpy(dest, source, lineSize);
 	}
 
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Recuperation d'une ligne de pixels
+//-----------------------------------------------------------------------------
+bool XTiffStripImage::GetLine(XFile* file, uint32 num, byte* area)
+{
+	if (num >= m_nH)
+		return false;
+	uint32 numStrip = num / m_nRowsPerStrip;
+	if (!LoadStrip(file, numStrip))
+		return false;
+	uint32 numLine = num % m_nRowsPerStrip;
+	::memcpy(area, &m_Strip[numLine * m_nW * m_nPixSize], m_nW * m_nPixSize);
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Recuperation d'une ROI avec un facteur de zoom
+//-----------------------------------------------------------------------------
+bool XTiffStripImage::GetZoomArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area, uint32 factor)
+{
+	if (factor == 0) return false;
+	if (factor == 1) return GetArea(file, x, y, w, h, area);
+	if ((x + w > m_nW) || (y + h > m_nH))
+		return false;
+
+	byte* line = AllocArea(m_nW, 1);
+	if (line == NULL)
+		return false;
+
+	uint32 xpos = x * m_nPixSize;
+	uint32 wout = w / factor;
+	uint32 hout = h / factor;
+	uint32 maxW = XMin(xpos + w * m_nPixSize, m_nPixSize * (m_nW - 1));
+	uint32 maxH = XMin(y + h, m_nH - 1);
+
+	uint32 i = y;
+	for (uint32 numli = 0; numli < hout; numli++) {
+		GetLine(file, i, line);
+		uint32 j = xpos;
+		byte* buf = &area[numli * (m_nPixSize * wout)];
+		for (uint32 numpx = 0; numpx < wout; numpx++) {
+			::memcpy(buf, &line[j], m_nPixSize);
+			buf += m_nPixSize;
+			j += (factor * m_nPixSize);
+			if (j > maxW)
+				break;
+		};
+		i += factor;
+		if (i > maxH)
+			break;
+	}
+	delete[] line;
 	return true;
 }

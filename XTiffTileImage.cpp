@@ -7,6 +7,7 @@
 // Date : 09/06/2021
 //-----------------------------------------------------------------------------
 
+#include <cstring>
 #include "XTiffTileImage.h"
 #include "XLzwCodec.h"
 #include "XZlibCodec.h"
@@ -143,7 +144,7 @@ bool XTiffTileImage::LoadTile(XFile* file, uint32 x, uint32 y)
 bool XTiffTileImage::Decompress()
 {
 	if ((m_nCompression == XTiffReader::UNCOMPRESSED1) || (m_nCompression == XTiffReader::UNCOMPRESSED2)) {
-		std::memcpy(m_Tile, m_Buffer, m_TileCounts[m_nLastTile]);
+    ::memcpy(m_Tile, m_Buffer, m_TileCounts[m_nLastTile]);
 		return true;
 	}
 	if (m_nCompression == XTiffReader::PACKBITS) {
@@ -263,9 +264,6 @@ bool XTiffTileImage::GetArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h
 	if ((x + w > m_nW) || (y + h > m_nH))
 		return false;
 
-	uint32 nbTileW = (uint32)ceil((double)m_nW / (double)m_nTileWidth);
-	uint32 nbTileH = (uint32)ceil((double)m_nH / (double)m_nTileHeight);
-
 	uint32 startX = (uint32)floor((double)x / (double)m_nTileWidth);
 	uint32 startY = (uint32)floor((double)y / (double)m_nTileHeight);
 	uint32 endX = (uint32)floor((double)(x + w - 1) / (double)m_nTileWidth);
@@ -327,7 +325,75 @@ bool XTiffTileImage::CopyTile(uint32 tX, uint32 tY, uint32 x, uint32 y, uint32 w
 		byte* dest = &area[(Y0 * w + i * w + X0) * m_nPixSize];
 		if (((Y0 * w + i * w + X0) * m_nPixSize + lineSize) > (w * h * m_nPixSize))
 			return false;
-		std::memcpy(dest, source, lineSize);
+    ::memcpy(dest, source, lineSize);
 	}
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Recuperation d'une ligne de pixels
+//-----------------------------------------------------------------------------
+bool XTiffTileImage::GetLine(XFile* file, uint32 num, byte* area)
+{
+	return GetArea(file, 0, num, m_nW, 1, area);
+}
+
+//-----------------------------------------------------------------------------
+// Recuperation d'une ROI avec un facteur de zoom
+//-----------------------------------------------------------------------------
+bool XTiffTileImage::GetZoomArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area, uint32 factor)
+{
+	if (factor == 0) return false;
+	if (factor == 1) return GetArea(file, x, y, w, h, area);
+	if ((x + w > m_nW) || (y + h > m_nH))
+		return false;
+
+	uint32 startX = (uint32)floor((double)x / (double)m_nTileWidth);
+	uint32 startY = (uint32)floor((double)y / (double)m_nTileHeight);
+	uint32 endX = (uint32)floor((double)(x + w - 1) / (double)m_nTileWidth);
+	uint32 endY = (uint32)floor((double)(y + h - 1) / (double)m_nTileHeight);
+
+	for (uint32 i = startY; i <= endY; i++) {
+		for (uint32 j = startX; j <= endX; j++) {
+			if (!LoadTile(file, j, i))
+				return false;
+			if (!CopyZoomTile(j, i, x, y, w, h, area, factor))
+				return false;
+		}
+	}
+
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Copie les pixels d'une tile dans une ROI avec un facteur de zoom
+//-----------------------------------------------------------------------------
+bool XTiffTileImage::CopyZoomTile(uint32 tX, uint32 tY, uint32 x, uint32 y, uint32 w, uint32 h, 
+																	byte* area, uint32 factor)
+{
+	uint32 wout = w / factor;
+	uint32 hout = h / factor;
+
+	// Copie dans la ROI
+	uint32 ycur = y;
+	for (uint32 numli = 0; numli < hout; numli++) {
+		if ((ycur < tY * m_nTileHeight) || (ycur > (tY + 1) * m_nTileHeight)) {
+			ycur += factor;
+			continue;
+		}
+		uint32 numTileLine = (ycur - tY * m_nTileHeight);
+		uint32 xcur = x;
+		for (uint32 numco = 0; numco < wout; numco++) {
+			if ((xcur < tX * m_nTileWidth) || (xcur > (tX + 1) * m_nTileWidth)) {
+				xcur += factor;
+				continue;
+			}
+			uint32 numTileCol = (xcur - tX * m_nTileWidth);
+			::memcpy(&area[(numli * wout + numco) * m_nPixSize], &m_Tile[(numTileLine* m_nTileWidth + numTileCol)* m_nPixSize], m_nPixSize);
+			xcur += factor;
+		}
+		ycur += factor;
+	}
+
 	return true;
 }

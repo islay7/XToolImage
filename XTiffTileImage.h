@@ -21,6 +21,8 @@ public:
 	bool SetTiffReader(XTiffReader* reader);
 
 	virtual bool GetArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area);
+	virtual bool GetLine(XFile* file, uint32 num, byte* area);
+	virtual bool GetZoomArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area, uint32 factor);
 
 protected:
 	void		Clear();
@@ -30,6 +32,7 @@ protected:
 	void		Predictor();
 	bool		PostProcess();
 	bool		CopyTile(uint32 tX, uint32 tY, uint32 x, uint32 y, uint32 w, uint32 h, byte* area);
+	bool		CopyZoomTile(uint32 tX, uint32 tY, uint32 x, uint32 y, uint32 w, uint32 h, byte* area, uint32 factor);
 
 	uint32		m_nTileWidth;
 	uint32		m_nTileHeight;

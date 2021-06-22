@@ -7,6 +7,7 @@
 // Date : 18/06/2021
 //-----------------------------------------------------------------------------
 
+#include <cstring>
 #include "XBaseImage.h"
 
 //-----------------------------------------------------------------------------
@@ -52,7 +53,7 @@ byte* XBaseImage::AllocArea(uint32 w, uint32 h)
 //-----------------------------------------------------------------------------
 bool XBaseImage::CMYK2RGB(byte* buffer, uint32 w, uint32 h)
 {
-	double R, G, B, C, M, Y, K;
+  double C, M, Y, K;
 	byte* ptr_in = buffer, * ptr_out = buffer;
 	for (uint32 i = 0; i < h; i++) {
 		for (uint32 j = 0; j < w; j++) {
@@ -69,4 +70,95 @@ bool XBaseImage::CMYK2RGB(byte* buffer, uint32 w, uint32 h)
 		}
 	}
 	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Zoom sur un buffer de pixels
+//-----------------------------------------------------------------------------
+bool XBaseImage::ZoomArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 wout, uint32 hout, uint32 nbbyte)
+{
+	uint32* lut = new uint32[wout];
+	for (uint32 i = 0; i < wout; i++)
+		lut[i] = nbbyte * (i * win / wout);
+
+	for (uint32 i = 0; i < hout; i++) {
+		byte* line = &out[i * (nbbyte * wout)];
+		byte* src = &in[nbbyte * win * (i * hin / hout)];
+		for (uint32 k = 0; k < wout; k++) {
+      ::memcpy(line, &src[lut[k]], nbbyte);
+			line += nbbyte;
+		}
+	}
+
+	delete[] lut;
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Inversion de triplet RGB en triplet BGR : Windows travaille en BGR
+//-----------------------------------------------------------------------------
+void XBaseImage::SwitchRGB2BGR(byte* buf, uint32 buf_size)
+{
+	byte r;
+	for (uint32 i = 0; i < buf_size; i += 3) {
+		r = buf[i + 2];
+		buf[i + 2] = buf[i];
+		buf[i] = r;
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Rotation d'une zone de pixels : 0->0° , 1->90°, 2->180°, 3->270°
+//-----------------------------------------------------------------------------
+bool XBaseImage::RotateArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 nbbyte, uint32 rot)
+{
+	if (rot == 0)		// Pas de rotation
+		return true;
+	if (rot > 3)
+		return false;
+
+	byte* forw;
+	byte* back;
+	uint32 lineW = win * nbbyte;
+
+	if (rot == 2) {	// Rotation a 180 degres
+		for (uint32 i = 0; i < hin; i++) {
+			forw = &in[i * lineW];
+			back = &out[(hin - 1 - i) * lineW + (win - 1) * nbbyte];
+			for (uint32 j = 0; j < win; j++) {
+        ::memcpy(back, forw, nbbyte);
+				forw += nbbyte;
+				back -= nbbyte;
+			}
+		}
+		return true;
+	}
+
+	if (rot == 1) { // Rotation a 90 degres
+		for (uint32 i = 0; i < win; i++) {
+			forw = &in[i * nbbyte];
+			back = &out[(win - 1 - i) * hin * nbbyte];
+			for (uint32 j = 0; j < hin; j++) {
+        ::memcpy(back, forw, nbbyte);
+				back += nbbyte;
+				forw += lineW;
+			}
+		}
+		return true;
+	}
+
+	if (rot == 3) { // Rotation a 270 degres
+		for (uint32 i = 0; i < win; i++) {
+			forw = &in[i * nbbyte];
+			back = &out[i * hin * nbbyte + nbbyte * (hin - 1)];
+			for (uint32 j = 0; j < hin; j++) {
+        ::memcpy(back, forw, nbbyte);
+				forw += lineW;
+				back -= nbbyte;
+			}
+		}
+		return true;
+	}
+
+	return false;
 }

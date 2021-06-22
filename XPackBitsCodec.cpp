@@ -8,6 +8,8 @@
 //
 // Classe XPackBitsCodec : compresseur / Decompresseur PackBits
 //-----------------------------------------------------------------------------
+
+#include <cstring>
 #include "XPackBitsCodec.h"
 
 bool XPackBitsCodec::Decompress(byte* lzw, uint32 size_in, byte* out, uint32 size_out)
@@ -17,7 +19,7 @@ bool XPackBitsCodec::Decompress(byte* lzw, uint32 size_in, byte* out, uint32 siz
   while (cmpt < size_in) {
     n = (signed char)lzw[cmpt];
     if ((n >= 0) && (n <= 127)) {
-      std::memcpy((void*)&out[count], (void*)&lzw[cmpt + 1], (n + 1));
+      ::memcpy((void*)&out[count], (void*)&lzw[cmpt + 1], (n + 1));
       count += (n + 1);
       cmpt += (n + 2);
     }

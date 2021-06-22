@@ -7,6 +7,7 @@
 // Date : 19/05/2021
 //-----------------------------------------------------------------------------
 
+#include <cstring>
 #include "XTiffReader.h"
 
 //-----------------------------------------------------------------------------
@@ -131,7 +132,7 @@ uint32 XTiffReader::TypeSize(eDataType type)
   case ASCII:	return sizeof(byte);
   case SHORT:	return sizeof(uint16);
   case LONG:	return sizeof(uint32);
-  case RATIONAL: 2 * sizeof(uint32);
+  case RATIONAL: return 2 * sizeof(uint32);
     /* Types version 6 des specifications TIFF */
   case SBYTE: return sizeof(byte);
   case UNDEFINED: return sizeof(byte);
@@ -198,7 +199,7 @@ bool XTiffReader::ReadDataArray(std::istream* in, eTagID id, void* V, int size)
     return false;
   uint32 datasize = DataSize(&T);
   if (datasize <= 4) {
-    std::memcpy(V, &T.DataOffset, datasize);
+    ::memcpy(V, &T.DataOffset, datasize);
     return true;
   }
   in->seekg(T.DataOffset);
@@ -442,8 +443,8 @@ bool XTiffReader::GetStripInfo(uint32* nbStrip, uint32** offset, uint32** count)
     delete[] *offset;
     return false;
   }
-  std::memcpy(*offset, m_StripOffsets, m_nNbStripOffsets * sizeof(uint32));
-  std::memcpy(*count, m_StripCounts, m_nNbStripCounts * sizeof(uint32));
+  ::memcpy(*offset, m_StripOffsets, m_nNbStripOffsets * sizeof(uint32));
+  ::memcpy(*count, m_StripCounts, m_nNbStripCounts * sizeof(uint32));
   return true;
 }
 
@@ -465,8 +466,8 @@ bool XTiffReader::GetTileInfo(uint32* nbTile, uint32** offset, uint32** count)
     delete[] * offset;
     return false;
   }
-  std::memcpy(*offset, m_TileOffsets, m_nNbTileOffsets * sizeof(uint32));
-  std::memcpy(*count, m_TileCounts, m_nNbTileCounts * sizeof(uint32));
+  ::memcpy(*offset, m_TileOffsets, m_nNbTileOffsets * sizeof(uint32));
+  ::memcpy(*count, m_TileCounts, m_nNbTileCounts * sizeof(uint32));
   return true;
 }
 

@@ -41,8 +41,14 @@ public:
 	virtual byte* AllocArea(uint32 w, uint32 h);
 
 	virtual bool GetArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area) = 0;
+	virtual bool GetLine(XFile* file, uint32 num, byte* area) = 0;
+	virtual bool GetZoomArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area, uint32 factor) = 0;
 
 	static bool CMYK2RGB(byte* buffer, uint32 w, uint32 h);
+	static bool ZoomArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 wout, uint32 hout, uint32 nbbyte);
+	static void SwitchRGB2BGR(byte* buf, uint32 buf_size);
+	static bool RotateArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 nbbyte, uint32 rot);
+
 };
 
 #endif //XBASEIMAGE_H

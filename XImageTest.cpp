@@ -2,44 +2,98 @@
 //
 
 #include <iostream>
-//#include "XJp2Image.h"
+#include "XJpeg2000Image.h"
 #include "../XTool/XTiffWriter.h"
 #include "XTiffTileImage.h"
 #include "XTiffStripImage.h"
 #include "XDtmShader.h"
 
-/*
+
+int TestRotation()
+{
+  std::string filename;
+  std::cout << "Nom du fichier : ";
+  std::cin >> filename;
+  if (filename.size() < 2)
+    filename = "D:\\Data\\Images_Test\\TIFF\\TIF_JPEG.tif";
+
+  XFile file;
+  if (!file.Open(filename.c_str(), std::ios::in | std::ios::binary)) {
+    std::cerr << "Impossible d'ouvrir le fichier" << std::endl;
+    return -1;
+  }
+  XTiffReader reader;
+  if (!reader.Read(file.IStream())) {
+    std::cerr << "Lecture TIFF impossible" << std::endl;
+    return -1;
+  }
+  if (!reader.AnalyzeIFD(file.IStream())) {
+    std::cerr << "Analyse de l'IFD impossible" << std::endl;
+    return -1;
+  }
+
+  XTiffStripImage image;
+  if (!image.SetTiffReader(&reader)) {
+    std::cerr << "Ce n'est pas une image TIFF Strip" << std::endl;
+    return -1;
+  }
+
+  uint32 W = image.W();
+  uint32 H = image.H();
+  byte* area = new byte[W * H * image.NbSample()];
+  byte* area_rot = new byte[W * H * image.NbSample()];
+  image.GetArea(&file, 0, 0, W, H, area);
+  file.Close();
+
+  XTiffWriter tiff;
+  XBaseImage::RotateArea(area, area_rot, W, H, image.NbSample(), 1);
+  tiff.Write("test_rot90.tif", H, W, image.NbSample(), 8, area_rot);
+  XBaseImage::RotateArea(area, area_rot, W, H, image.NbSample(), 2);
+  tiff.Write("test_rot180.tif", W, H, image.NbSample(), 8, area_rot);
+  XBaseImage::RotateArea(area, area_rot, W, H, image.NbSample(), 3);
+  tiff.Write("test_rot270.tif", H, W, image.NbSample(), 8, area_rot);
+
+  delete[] area;
+  delete[] area_rot;
+  return 1;
+}
+
 int TestJP2()
 {
   std::string filename;
   std::cout << "Nom du fichier : ";
   std::cin >> filename;
+  if (filename.size() < 2)
+    filename = "D:\\Data\\PCRS\\Orthos\\56-2019-0229-6764-LA93-0M05-RVB-E100.jp2";
 
-  XJp2Image* image = new XJp2Image(filename.c_str());
+  XJpeg2000Image* image = new XJpeg2000Image(filename.c_str());
   if (image->IsValid() != true) {
     delete image;
     return -1;
   }
-  std::cout << "Largeur : " << image->Width() << std::endl;
-  std::cout << "Hauteur : " << image->Height() << std::endl;
+  std::cout << "Largeur : " << image->W() << std::endl;
+  std::cout << "Hauteur : " << image->H() << std::endl;
   double xmin = 0., ymax = 0., gsd = 0.;
-  image->GetGeoref(&xmin, &ymax, &gsd);
-  std::cout << "Xmin : " << xmin << std::endl;
-  std::cout << "Ymax : " << ymax << std::endl;
-  std::cout << "Resolution : " << gsd << std::endl;
+  
+  std::cout << "Xmin : " << image->X0() << std::endl;
+  std::cout << "Ymax : " << image->Y0() << std::endl;
+  std::cout << "Resolution : " << image->GSD() << std::endl;
+
+  uint32 W = XMin(image->W(), (uint32)2000), H = XMin(image->H(), (uint32)2000), X0 = 10000, Y0 = 10000;
+  byte* area = image->AllocArea(W, H);
+  std::memset(area, 255, W * H * image->PixSize());
 
   XFile file;
   file.Open(filename.c_str(), std::ios_base::binary);
-  byte* area = new byte[200 * 200 * image->NbByte()];
-  image->GetArea(&file, 0, 0, 200, 200, area);
+  image->GetArea(&file, X0, Y0, W, H, area);
   XTiffWriter tiff;
-  tiff.Write("test.tif", 200, 200, 3, 8, area);
+  tiff.Write("test_JPEG2000.tif", W, H, image->NbSample(), 8, area);
 
   delete[] area;
   delete image;
-  return 0;
+  return 1;
 }
-*/
+
 void TestTif()
 {
   std::string filename;
@@ -306,19 +360,99 @@ bool TestTifImage(std::string file_in, std::string file_out)
   return true;
 }
 
+// Test de la lecture d'une image TIFF
+// On lit l'image et on prend une ROI avec un zoom et on cree un fichier TIFF non compresse avec le contenu
+bool TestTifZoomImage(std::string file_in, std::string file_out)
+{
+  XFile file;
+  if (!file.Open(file_in.c_str(), std::ios::in | std::ios::binary)) {
+    std::cerr << "Impossible d'ouvrir le fichier " << file_in << std::endl;
+    return false;
+  }
+  XTiffReader reader;
+  if (!reader.Read(file.IStream())) {
+    std::cerr << "Lecture TIFF impossible de " << file_in << std::endl;
+    return false;
+  }
+  if (!reader.AnalyzeIFD(file.IStream())) {
+    std::cerr << "Analyse de l'IFD impossible de " << file_in << std::endl;
+    return false;
+  }
+
+  XBaseImage* image;
+  if (reader.RowsPerStrip() == 0) { // Tile
+    XTiffTileImage* tile_image = new XTiffTileImage;
+    if (!tile_image->SetTiffReader(&reader)) {
+      std::cerr << "Lecture de l'image TIFF tile impossible de " << file_in << std::endl;
+      return false;
+    }
+    image = tile_image;
+  }
+  else {  // Strip
+    XTiffStripImage* strip_image = new XTiffStripImage;
+    if (!strip_image->SetTiffReader(&reader)) {
+      std::cerr << "Lecture de l'image TIFF strip impossible de " << file_in << std::endl;
+      return false;
+    }
+    image = strip_image;
+  }
+
+  uint32 factor = 2;
+  uint32 X0 = 200, Y0 = 200;
+  uint32 W = XMin(image->W() / factor, (uint32)2000) - X0, H = XMin(image->H() / factor, (uint32)2000) - Y0;
+  byte* area = image->AllocArea(2*W , 2*H );
+  std::memset(area, 255, W * H * image->PixSize());
+  if (!image->GetZoomArea(&file, X0, Y0, W * factor, H * factor, area, factor)) {
+    delete[] area;
+    file.Close();
+    std::cerr << "GetArea impossible de " << file_in << std::endl;
+    return false;
+  }
+  file.Close();
+
+  XTiffWriter tiff;
+  uint16 nbSample = image->NbSample(), nbBits = image->NbBits();
+  if (nbSample == 4) { // CMYK
+    image->CMYK2RGB(area, W, H);
+    nbSample = 3;
+  }
+  if ((nbSample == 1) && (nbBits == 32)) { // MNT 32 bits
+    XDtmShader dtm(image->GSD());
+    byte* rgb = new byte[W * H * 3L];
+    dtm.ConvertArea((float*)area, W, H, rgb);
+    delete[] area;
+    area = rgb;
+
+    nbSample = 3;
+    nbBits = 8;
+  }
+  if ((nbSample == 1) && (nbBits == 1)) // Images 1 bit -> conversion en 8 bits
+    nbBits = 8;
+
+  tiff.Write(file_out.c_str(), W, H, nbSample, nbBits, area);
+
+  delete[] area;
+  delete[] image;
+  std::cout << "Traitement reussi de " << file_in << std::endl;
+  return true;
+}
+
 int main()
 {
   //BuildTestImage();
   std::cout << "Hello World!\n";
+
+  //return TestRotation();
+  //return TestJP2();
     
-  TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_DEFLATE.tif", "TIF_DEFLATE.tif");
+  TestTifZoomImage("D:\\Data\\Images_Test\\TIFF\\TIF_DEFLATE.tif", "TIF_DEFLATE.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_DEFLATE_8bits.tif", "TIF_DEFLATE_8bits.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_JPEG.tif", "TIF_JPEG.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_LZW.tif", "TIF_LZW.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_LZW_8bits.tif", "TIF_LZW_8bits.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_PACKBIT.tif", "TIF_PACKBIT.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_PACKBIT_8bits.tif", "TIF_PACKBIT_8bits.tif");
-  TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_SANS_COMPRESSION.tif", "TIF_SANS_COMPRESSION.tif");
+  TestTifZoomImage("D:\\Data\\Images_Test\\TIFF\\TIF_SANS_COMPRESSION.tif", "TIF_SANS_COMPRESSION.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_SANS_COMPRESSION_8bits.tif", "TIF_SANS_COMPRESSION_8bits.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\1BIT_DEFLATE.tif", "1BIT_DEFLATE.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\1BIT_LZW.tif", "1BIT_LZW.tif");
@@ -328,7 +462,7 @@ int main()
   TestTifImage("D:\\Data\\Images_Test\\COG\\SkySat_Freeport_s03_20170831T162740Z3.tif", "COG2.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_DEFLATE_cmyk.tif", "TIF_DEFLATE_cmyk.tif");
   TestTifImage("D:\\Data\\Images_Test\\MNT\\Litto3D_MNT_Lamb93_IGN69_0707_6157.tif", "Litto3D_MNT_Lamb93_IGN69_0707_6157.tif");
-
+  TestTifZoomImage("D:\\Data\\Images_Test\\COG\\74-2020-0916-6550-LA93-0M20-RVB-E100_cog90.tif", "COGZoom.tif");
   return 0;
 }
 
