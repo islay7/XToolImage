@@ -14,6 +14,12 @@
 #include "XJpegCodec.h"
 #include "XPackBitsCodec.h"
 
+// Gestion de la memoire partagee
+byte*     XTiffTileImage::m_gBuffer = NULL;   // Buffer global de lecture
+uint32    XTiffTileImage::m_gBufSize = 0;     // Taille du buffer
+byte*     XTiffTileImage::m_gTile = NULL;     // Tile globale
+uint32    XTiffTileImage::m_gTileSize = 0;    // Taille de la tile globale
+
 //-----------------------------------------------------------------------------
 // Constructeur
 //-----------------------------------------------------------------------------
@@ -21,7 +27,7 @@ XTiffTileImage::XTiffTileImage()
 {
 	m_TileOffsets = m_TileCounts = NULL;
 	m_ColorMap = NULL;
-	m_Buffer = m_Tile = NULL;
+  m_Tile = NULL;
 	m_JpegTables = NULL;
 	Clear();
 }
@@ -37,16 +43,12 @@ void XTiffTileImage::Clear()
 		delete[] m_TileCounts;
 	if (m_ColorMap != NULL)
 		delete[] m_ColorMap;
-	if (m_Buffer != NULL)
-		delete[] m_Buffer;
-	if (m_Tile != NULL)
-		delete[] m_Tile;
 	if (m_JpegTables != NULL)
 		delete[] m_JpegTables;
 	m_TileOffsets = NULL;
 	m_TileCounts = NULL;
 	m_ColorMap = NULL;
-	m_Buffer = m_Tile = NULL;
+  m_Tile = NULL;
 	m_JpegTables = NULL;
 
 	m_nW = m_nH = m_nTileWidth = m_nTileHeight = m_nNbTile = 0;
@@ -101,15 +103,23 @@ bool XTiffTileImage::AllocBuffer()
 	for (uint32 i = 0; i < m_nNbTile; i++)
 		if (m_TileCounts[i] > maxsize)
 			maxsize = m_TileCounts[i];
-	m_Buffer = new byte[maxsize];
-	if (m_Buffer == NULL)
-		return false;
-	m_Tile = new byte[m_nTileWidth * m_nTileHeight * m_nPixSize];
-	if (m_Tile == NULL) {
-		delete[] m_Buffer;
-		m_Buffer = NULL;
-		return false;
-	}
+
+  if (maxsize > m_gBufSize) {
+    if (m_gBuffer != NULL) delete[] m_gBuffer;
+    m_gBuffer = new byte[maxsize];
+    if (m_gBuffer == NULL)
+      return false;
+    m_gBufSize = maxsize;
+  }
+  uint32 tileSize = m_nTileWidth * m_nTileHeight * m_nPixSize;
+  if (tileSize > m_gTileSize) {
+    if (m_gTile != NULL) delete[] m_gTile;
+    m_gTile = new byte[tileSize];
+    if (m_gTile == NULL)
+      return false;
+    m_gTileSize = tileSize;
+  }
+
 	return true;
 }
 
@@ -129,7 +139,7 @@ bool XTiffTileImage::LoadTile(XFile* file, uint32 x, uint32 y)
 	if (numTile == m_nLastTile)	// La Tile est deja chargee
 		return true;
 	file->Seek(m_TileOffsets[numTile]);
-	uint32 nBytesRead = file->Read((char*)m_Buffer, m_TileCounts[numTile]);
+  uint32 nBytesRead = file->Read((char*)m_gBuffer, m_TileCounts[numTile]);
 	if (nBytesRead != m_TileCounts[numTile])
 		return false;
 	m_nLastTile = numTile;
@@ -144,32 +154,32 @@ bool XTiffTileImage::LoadTile(XFile* file, uint32 x, uint32 y)
 bool XTiffTileImage::Decompress()
 {
 	if ((m_nCompression == XTiffReader::UNCOMPRESSED1) || (m_nCompression == XTiffReader::UNCOMPRESSED2)) {
-    ::memcpy(m_Tile, m_Buffer, m_TileCounts[m_nLastTile]);
+    ::memcpy(m_Tile, m_gBuffer, m_TileCounts[m_nLastTile]);
 		return true;
 	}
 	if (m_nCompression == XTiffReader::PACKBITS) {
 		XPackBitsCodec codec;
-		return codec.Decompress(m_Buffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize);
+    return codec.Decompress(m_gBuffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize);
 	}
 	if (m_nCompression == XTiffReader::LZW) {
 		XLzwCodec codec;
-		codec.SetDataIO(m_Buffer, m_Tile, m_nTileHeight*m_nTileWidth*m_nPixSize);
+    codec.SetDataIO(m_gBuffer, m_Tile, m_nTileHeight*m_nTileWidth*m_nPixSize);
 		codec.Decompress();
 		Predictor();
 		return true;
 	}
 	if (m_nCompression == XTiffReader::DEFLATE) {
 		XZlibCodec codec;
-		bool flag = codec.Decompress(m_Buffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize);
+    bool flag = codec.Decompress(m_gBuffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize);
 		Predictor();
 		return flag;
 	}
 	if ((m_nCompression == XTiffReader::JPEG)||(m_nCompression == XTiffReader::JPEGv2)) {
 		XJpegCodec codec;
 		if (m_nPhotInt == XTiffReader::YCBCR)
-			return codec.DecompressRaw(m_Buffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize,
+      return codec.DecompressRaw(m_gBuffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize,
 																	m_JpegTables, m_nJpegTablesSize);
-		return codec.Decompress(m_Buffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize,
+    return codec.Decompress(m_gBuffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize,
 														m_JpegTables, m_nJpegTablesSize);
 	}
 
@@ -269,6 +279,8 @@ bool XTiffTileImage::GetArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h
 	uint32 endX = (uint32)floor((double)(x + w - 1) / (double)m_nTileWidth);
 	uint32 endY = (uint32)floor((double)(y + h - 1) / (double)m_nTileHeight);
 
+  m_Tile = m_gTile;
+  m_nLastTile = 0xFFFFFFFF;
 	for (uint32 i = startY; i <= endY; i++) {
 		for (uint32 j = startX; j <= endX; j++) {
 			if (!LoadTile(file, j, i))
@@ -353,7 +365,9 @@ bool XTiffTileImage::GetZoomArea(XFile* file, uint32 x, uint32 y, uint32 w, uint
 	uint32 endX = (uint32)floor((double)(x + w - 1) / (double)m_nTileWidth);
 	uint32 endY = (uint32)floor((double)(y + h - 1) / (double)m_nTileHeight);
 
-	for (uint32 i = startY; i <= endY; i++) {
+  m_Tile = m_gTile;
+  m_nLastTile = 0xFFFFFFFF;
+  for (uint32 i = startY; i <= endY; i++) {
 		for (uint32 j = startX; j <= endX; j++) {
 			if (!LoadTile(file, j, i))
 				return false;

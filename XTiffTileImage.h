@@ -47,9 +47,14 @@ protected:
 	byte*			m_JpegTables;
 	uint32		m_nJpegTablesSize;
 
-	byte*			m_Buffer; // Buffer de lecture
 	byte*			m_Tile;		// Derniere tile chargee
 	uint32		m_nLastTile;	// Numero de la derniere tile chargee
+
+  // Gestion de la memoire partagee
+  static byte*     m_gBuffer;   // Buffer global de lecture
+  static uint32    m_gBufSize;  // Taille du buffer
+  static byte*     m_gTile;     // Tile globale
+  static uint32    m_gTileSize; // Taille de la tile globale
 };
 
 #endif //XTIFFTILEIMAGE_H

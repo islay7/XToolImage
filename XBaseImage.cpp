@@ -49,6 +49,70 @@ byte* XBaseImage::AllocArea(uint32 w, uint32 h)
 }
 
 //-----------------------------------------------------------------------------
+// Recuperation des valeurs brutes des pixels sur une ROI
+//-----------------------------------------------------------------------------
+bool XBaseImage::GetRawArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, float* pix,
+                            uint32* nb_sample, uint32 factor)
+{
+  if (factor == 0)
+    return false;
+  uint32 wout = w / factor, hout = h / factor;
+  byte* area = AllocArea(wout, hout);
+  if (area == NULL)
+    return false;
+  if (!GetZoomArea(file, x, y, w, h, area, factor)) {
+    delete[] area;
+    return false;
+  }
+  *nb_sample = NbSample();
+  float* pix_ptr = pix;
+
+  if (NbBits() <= 8) {
+    byte* pix_area = area;
+    for (uint32 i = 0; i < wout * hout * NbSample(); i++) {
+      *pix_ptr = *pix_area;
+      pix_ptr++;
+      pix_area++;
+    }
+  }
+  if (NbBits() == 16) {
+    uint16* pix_area = (uint16*)area;
+    for (uint32 i = 0; i < wout * hout * NbSample(); i++) {
+      *pix_ptr = *pix_area;
+      pix_ptr++;
+      pix_area++;
+    }
+  }
+  if (NbBits() == 32)
+    ::memcpy(pix, area, wout * hout * NbSample() * sizeof(float));
+
+  delete[] area;
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+// Recuperation des valeurs brutes des pixels autour d'une position
+//-----------------------------------------------------------------------------
+bool XBaseImage::GetRawPixel(XFile* file, uint32 x, uint32 y, uint32 win, double* pix, uint32* nb_sample)
+{
+  if ((win > x)||(win > y))
+    return false;
+  if ((x+win >= m_nW)||(y+win >= m_nH))
+    return false;
+  float* area = new float[(2*win+1)*(2*win+1)* NbSample()];
+  if (area == NULL)
+    return false;
+  if (!GetRawArea(file, x - win, y - win, (2*win+1), (2*win+1),area, nb_sample)) {
+    delete[] area;
+    return false;
+  }
+  for (uint32 i = 0; i < (2*win+1) * (2*win+1) * NbSample(); i++)
+    pix[i] = area[i];
+  delete[] area;
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 // Conversion CMYK -> RGB
 //-----------------------------------------------------------------------------
 bool XBaseImage::CMYK2RGB(byte* buffer, uint32 w, uint32 h)
@@ -68,6 +132,36 @@ bool XBaseImage::CMYK2RGB(byte* buffer, uint32 w, uint32 h)
 			*ptr_out = (byte)((1 - M)*255); ptr_out++;
 			*ptr_out = (byte)((1 - Y)*255); ptr_out++;
 		}
+	}
+	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Conversion 16bits -> 8bits
+//-----------------------------------------------------------------------------
+bool XBaseImage::Uint16To8bits(byte* buffer, uint32 w, uint32 h, uint16 min, uint16 max)
+{
+	// Recherche du min / max
+	uint16 val_min = min, val_max = max;
+	if ((min == 0) && (max == 0)) {
+		val_min = 0xFFFF;
+		val_max = 0;
+		uint16* ptr = (uint16*)buffer;
+		for (uint32 i = 0; i < w * h; i++) {
+			val_min = XMin(*ptr, val_min);
+			val_max = XMax(*ptr, val_max);
+			ptr++;
+		}
+	}
+	if (val_max == 0)
+		return true;
+	// Application de la transformation
+	uint16* ptr_val = (uint16*)buffer;
+	byte* ptr_buf = buffer;
+	for (uint32 i = 0; i < w * h; i++) {
+		*ptr_buf = (*ptr_val - val_min) * 255 / val_max;
+		ptr_buf++;
+		ptr_val++;
 	}
 	return true;
 }

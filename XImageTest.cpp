@@ -6,6 +6,7 @@
 #include "../XTool/XTiffWriter.h"
 #include "XTiffTileImage.h"
 #include "XTiffStripImage.h"
+#include "XCogImage.h"
 #include "XDtmShader.h"
 
 
@@ -92,6 +93,71 @@ int TestJP2()
   delete[] area;
   delete image;
   return 1;
+}
+
+void TestCog()
+{
+  std::string filename;
+  std::cout << "Nom du fichier : ";
+  std::cin >> filename;
+  if (filename.size() < 2)
+    //   filename = "D:\\Data\\SkySat_Freeport_s03_20170831T162740Z3.tif";
+    filename = "D:\\Data\\Images_Test\\COG\\74-2020-0916-6550-LA93-0M20-RVB-E100_cog90.tif";
+  //filename = "D:\\mire_cog.tif";
+
+  XFile file;
+  if (!file.Open(filename.c_str(), std::ios::in | std::ios::binary)) {
+    std::cerr << "Impossible d'ouvrir le fichier" << std::endl;
+    return;
+  }
+  XCogImage cog;
+  if (!cog.Open(&file)) {
+    std::cerr << "Impossible d'ouvrir l'image COG" << std::endl;
+    return;
+  }
+ 
+  uint32 W = 2000, H = 2000, X0 = 0, Y0 = 0;
+  byte* area = new byte[W * H * 3L];
+  cog.GetArea(&file, X0, Y0, W, H, area);
+  file.Close();
+
+  XTiffWriter tiff;
+  tiff.Write("testCOG.tif", W, H, 3, 8, area);
+
+  delete[] area;
+}
+
+void TestZoomCog()
+{
+  std::string filename;
+  std::cout << "Nom du fichier : ";
+  std::cin >> filename;
+  if (filename.size() < 2)
+    //   filename = "D:\\Data\\SkySat_Freeport_s03_20170831T162740Z3.tif";
+    filename = "D:\\Data\\Images_Test\\COG\\74-2020-0916-6550-LA93-0M20-RVB-E100_cog90.tif";
+  //filename = "D:\\mire_cog.tif";
+
+  XFile file;
+  if (!file.Open(filename.c_str(), std::ios::in | std::ios::binary)) {
+    std::cerr << "Impossible d'ouvrir le fichier" << std::endl;
+    return;
+  }
+  XCogImage cog;
+  if (!cog.Open(&file)) {
+    std::cerr << "Impossible d'ouvrir l'image COG" << std::endl;
+    return;
+  }
+
+  uint32 factor = 100;
+  uint32 W = cog.W() / factor, H = cog.H() / factor;
+  byte* area = new byte[W * H * 3L];
+  cog.GetZoomArea(&file, 0, 0, cog.W(), cog.H(), area, factor);
+  file.Close();
+
+  XTiffWriter tiff;
+  tiff.Write("testZoomCOG.tif", W, H, 3, 8, area);
+
+  delete[] area;
 }
 
 void TestTif()
@@ -309,6 +375,7 @@ bool TestTifImage(std::string file_in, std::string file_out)
     XTiffTileImage* tile_image = new XTiffTileImage;
     if (!tile_image->SetTiffReader(&reader)) {
       std::cerr << "Lecture de l'image TIFF tile impossible de " << file_in << std::endl;
+      delete tile_image;
       return false;
     }
     image = tile_image;
@@ -317,6 +384,7 @@ bool TestTifImage(std::string file_in, std::string file_out)
     XTiffStripImage* strip_image = new XTiffStripImage;
     if (!strip_image->SetTiffReader(&reader)) {
       std::cerr << "Lecture de l'image TIFF strip impossible de " << file_in << std::endl;
+      delete strip_image;
       return false;
     }
     image = strip_image;
@@ -351,6 +419,23 @@ bool TestTifImage(std::string file_in, std::string file_out)
   }
   if ((nbSample == 1) && (nbBits == 1)) // Images 1 bit -> conversion en 8 bits
     nbBits = 8;
+  if ((nbSample == 1) && (nbBits == 16)) { // Image 16 bits
+    byte* gray = new byte[W * H];
+    
+    uint16* ptr = (uint16*)area;
+    byte* ptr_gray = gray;
+    for (uint32 i = 0; i < W * H; i++) {
+      *ptr_gray = (*ptr) / 256;
+      ptr++;
+      ptr_gray++;
+    }
+
+    delete[] area;
+    area = gray;
+
+    nbSample = 1;
+    nbBits = 8;
+  }
 
   tiff.Write(file_out.c_str(), W, H, nbSample, nbBits, area);
 
@@ -400,7 +485,7 @@ bool TestTifZoomImage(std::string file_in, std::string file_out)
   uint32 factor = 2;
   uint32 X0 = 200, Y0 = 200;
   uint32 W = XMin(image->W() / factor, (uint32)2000) - X0, H = XMin(image->H() / factor, (uint32)2000) - Y0;
-  byte* area = image->AllocArea(2*W , 2*H );
+  byte* area = image->AllocArea(W , H );
   std::memset(area, 255, W * H * image->PixSize());
   if (!image->GetZoomArea(&file, X0, Y0, W * factor, H * factor, area, factor)) {
     delete[] area;
@@ -428,6 +513,23 @@ bool TestTifZoomImage(std::string file_in, std::string file_out)
   }
   if ((nbSample == 1) && (nbBits == 1)) // Images 1 bit -> conversion en 8 bits
     nbBits = 8;
+  if ((nbSample == 1) && (nbBits == 16)) { // Image 16 bits
+    byte* gray = new byte[W * H];
+
+    uint16* ptr = (uint16*)area;
+    byte* ptr_gray = gray;
+    for (uint32 i = 0; i < W * H; i++) {
+      *ptr_gray = (*ptr) / 256;
+      ptr++;
+      ptr_gray++;
+    }
+
+    delete[] area;
+    area = gray;
+
+    nbSample = 1;
+    nbBits = 8;
+  }
 
   tiff.Write(file_out.c_str(), W, H, nbSample, nbBits, area);
 
@@ -442,9 +544,11 @@ int main()
   //BuildTestImage();
   std::cout << "Hello World!\n";
 
+  TestZoomCog();
+
   //return TestRotation();
   //return TestJP2();
-    
+  /*
   TestTifZoomImage("D:\\Data\\Images_Test\\TIFF\\TIF_DEFLATE.tif", "TIF_DEFLATE.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_DEFLATE_8bits.tif", "TIF_DEFLATE_8bits.tif");
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_JPEG.tif", "TIF_JPEG.tif");
@@ -463,6 +567,8 @@ int main()
   TestTifImage("D:\\Data\\Images_Test\\TIFF\\TIF_DEFLATE_cmyk.tif", "TIF_DEFLATE_cmyk.tif");
   TestTifImage("D:\\Data\\Images_Test\\MNT\\Litto3D_MNT_Lamb93_IGN69_0707_6157.tif", "Litto3D_MNT_Lamb93_IGN69_0707_6157.tif");
   TestTifZoomImage("D:\\Data\\Images_Test\\COG\\74-2020-0916-6550-LA93-0M20-RVB-E100_cog90.tif", "COGZoom.tif");
+  */
+  //TestTifImage("D:\\Data\\SENTINEL\\T31UDR\\SENTINEL2B_20190401-105716-455_L2A_T31UDR_C_V2-0\\SENTINEL2B_20190401-105716-455_L2A_T31UDR_C_V2-0_FRE_B2.tif", "SENTINEL.TIF");
   return 0;
 }
 
