@@ -8,6 +8,7 @@
 #include "XTiffStripImage.h"
 #include "XCogImage.h"
 #include "XDtmShader.h"
+#include "XBigTiffReader.h"
 
 
 int TestRotation()
@@ -134,8 +135,9 @@ void TestZoomCog()
   std::cin >> filename;
   if (filename.size() < 2)
     //   filename = "D:\\Data\\SkySat_Freeport_s03_20170831T162740Z3.tif";
-    filename = "D:\\Data\\Images_Test\\COG\\74-2020-0916-6550-LA93-0M20-RVB-E100_cog90.tif";
+    //filename = "D:\\Data\\Images_Test\\COG\\74-2020-0916-6550-LA93-0M20-RVB-E100_cog90.tif";
   //filename = "D:\\mire_cog.tif";
+    filename = "Z:\\proto_33\\DETECTION_DL\\blaye\\33_2015_urbain_b9.tif";
 
   XFile file;
   if (!file.Open(filename.c_str(), std::ios::in | std::ios::binary)) {
@@ -150,12 +152,12 @@ void TestZoomCog()
 
   uint32 factor = 100;
   uint32 W = cog.W() / factor, H = cog.H() / factor;
-  byte* area = new byte[W * H * 3L];
+  byte* area = new byte[W * H * cog.NbSample()];
   cog.GetZoomArea(&file, 0, 0, cog.W(), cog.H(), area, factor);
   file.Close();
 
   XTiffWriter tiff;
-  tiff.Write("testZoomCOG.tif", W, H, 3, 8, area);
+  tiff.Write("testZoomCOG.tif", W, H, cog.NbSample(), 8, area);
 
   delete[] area;
 }
@@ -272,6 +274,34 @@ void PrintTifInfo()
     return;
   }
   XTiffReader reader;
+  if (!reader.Read(file.IStream())) {
+    std::cerr << "Lecture TIFF impossible" << std::endl;
+    return;
+  }
+  reader.PrintIFDTag(&std::cout);
+  for (uint32 i = 0; i < reader.NbIFD(); i++) {
+    std::cout << "***** IFD " << i << std::endl;
+    reader.SetActiveIFD(i);
+    reader.AnalyzeIFD(file.IStream());
+    reader.PrintInfo(&std::cout);
+  }
+}
+
+void PrintBigTifInfo()
+{
+  std::string filename;
+  std::cout << "Nom du fichier : ";
+  std::cin >> filename;
+  if (filename.size() < 2)
+    //filename = "D:\\Temp\\BigTiff\\arcachon_nord_modele_multiclasses_urbain_b1.tif";
+    filename = "Z:\\proto_33\\DETECTION_DL\\blaye\\33_2015_urbain_b9.tif";
+
+  XFile file;
+  if (!file.Open(filename.c_str(), std::ios::in | std::ios::binary)) {
+    std::cerr << "Impossible d'ouvrir le fichier" << std::endl;
+    return;
+  }
+  XBigTiffReader reader;
   if (!reader.Read(file.IStream())) {
     std::cerr << "Lecture TIFF impossible" << std::endl;
     return;
@@ -543,6 +573,8 @@ int main()
 {
   //BuildTestImage();
   std::cout << "Hello World!\n";
+ 
+  //PrintBigTifInfo();
 
   TestZoomCog();
 

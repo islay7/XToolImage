@@ -1,21 +1,22 @@
 //-----------------------------------------------------------------------------
-//								XTiffReader.cpp
-//								===============
+//								XBigTiffReader.cpp
+//								==================
 //
 // Auteur : F.Becirspahic - IGN / DSTI / SIMV
 //
-// Date : 19/05/2021
+// Date : 21/07/2021
 //-----------------------------------------------------------------------------
 
 #include <cstring>
-#include "XTiffReader.h"
+#include "XBigTiffReader.h"
+#include "../XTool/XFile.h"
 
 //-----------------------------------------------------------------------------
 // Lecture de l'entete du fichier TIFF
 //-----------------------------------------------------------------------------
-bool XTiffReader::ReadHeader(std::istream* in)
+bool XBigTiffReader::ReadHeader(std::istream* in)
 {
-  uint16 identifier, version;
+  uint16 identifier, version, bytesize, zero;
   in->read((char*)&identifier, sizeof(uint16));
   if ((identifier != 0x4949) && (identifier != 0x4D4D))
     return false;
@@ -25,9 +26,12 @@ bool XTiffReader::ReadHeader(std::istream* in)
     m_bByteOrder = false; // MSB_FIRST;
 
   m_Endian.Read(in, m_bByteOrder, &version, sizeof(version));
+  m_Endian.Read(in, m_bByteOrder, &bytesize, sizeof(bytesize));
+  m_Endian.Read(in, m_bByteOrder, &zero, sizeof(zero));
+
   m_Endian.Read(in, m_bByteOrder, &m_nIFDOffset, sizeof(m_nIFDOffset));
 
-  if (version != 42)
+  if ((version != 43)||(bytesize != 8)||(zero != 0))
     return false;
   return true;
 }
@@ -35,14 +39,15 @@ bool XTiffReader::ReadHeader(std::istream* in)
 //-----------------------------------------------------------------------------
 // Lecture d'un IFD
 //-----------------------------------------------------------------------------
-bool XTiffReader::ReadIFD(std::istream* in, uint32 offset, TiffIFD* ifd)
+bool XBigTiffReader::ReadIFD(std::istream* in, uint64 offset, BigTiffIFD* ifd)
 {
-  uint16 nb_entries;
-  in->seekg(offset);
+  uint64 nb_entries = 0;
+  //in->seekg(offset);
+  XFile::Seek(in, offset);
   m_Endian.Read(in, m_bByteOrder, &nb_entries, sizeof(nb_entries));
  
   for (uint16 i = 0; i < nb_entries; i++) {
-    TiffTag tag;
+    BigTiffTag tag;
     m_Endian.Read(in, m_bByteOrder, &tag.TagId, sizeof(tag.TagId));
     m_Endian.Read(in, m_bByteOrder, &tag.DataType, sizeof(tag.DataType));
     m_Endian.Read(in, m_bByteOrder, &tag.DataCount, sizeof(tag.DataCount));
@@ -56,14 +61,14 @@ bool XTiffReader::ReadIFD(std::istream* in, uint32 offset, TiffIFD* ifd)
 //-----------------------------------------------------------------------------
 // Lecture
 //-----------------------------------------------------------------------------
-bool XTiffReader::Read(std::istream* in)
+bool XBigTiffReader::Read(std::istream* in)
 {
   if (!ReadHeader(in))
     return false;
   m_IFD.clear();
-  uint32 offset = m_nIFDOffset;
+  uint64 offset = m_nIFDOffset;
   while (offset != 0) {
-    TiffIFD ifd;
+    BigTiffIFD ifd;
     if (!ReadIFD(in, offset, &ifd))
       break;
     m_IFD.push_back(ifd);
@@ -76,7 +81,7 @@ bool XTiffReader::Read(std::istream* in)
 //-----------------------------------------------------------------------------
 // Reherche d'un tag
 //-----------------------------------------------------------------------------
-bool XTiffReader::FindTag(eTagID id, TiffTag* T)
+bool XBigTiffReader::FindTag(eTagID id, BigTiffTag* T)
 {
   for (uint32 i = 0; i < m_IFD[m_nActiveIFD].TagList.size(); i++) {
     if (m_IFD[m_nActiveIFD].TagList[i].TagId == id) {
@@ -90,7 +95,7 @@ bool XTiffReader::FindTag(eTagID id, TiffTag* T)
 //-----------------------------------------------------------------------------
 // Taille des donnees contenues dans un tag
 //-----------------------------------------------------------------------------
-uint32 XTiffReader::DataSize(TiffTag* T)
+uint32 XBigTiffReader::DataSize(BigTiffTag* T)
 {
   return T->DataCount * TypeSize((eDataType)T->DataType);
 }
@@ -98,22 +103,30 @@ uint32 XTiffReader::DataSize(TiffTag* T)
 //-----------------------------------------------------------------------------
 // Lecture des donnees stockees dans un tag
 //-----------------------------------------------------------------------------
-uint32 XTiffReader::ReadDataInTag(TiffTag* T)
+uint32 XBigTiffReader::ReadDataInTag(BigTiffTag* T)
 {
-  uint16* retour;
-
-  if (DataSize(T) <= 4) {
+  uint16* retour16;
+  uint32* retour32;
+  if (DataSize(T) <= 8) {
     switch (T->DataType) {
     case BYTE: return T->DataOffset;
     case ASCII:	return T->DataOffset;
     case SHORT:
-      retour = (uint16*)&T->DataOffset;
+      retour16 = (uint16*)&T->DataOffset;
       if (m_Endian.ByteOrder() == m_bByteOrder)
-        return retour[0];
+        return retour16[0];
       else
-        return retour[1];
+        return retour16[3];
       break;
-    case LONG: return T->DataOffset;
+    case LONG:       
+      retour32 = (uint32*)&T->DataOffset;
+      if (m_Endian.ByteOrder() == m_bByteOrder)
+        return retour32[0];
+      else
+        return retour32[1];
+    case LONG8 :
+    case SLONG8 :
+      return T->DataOffset;
     } /* endswitch */
   }
   return 0;
@@ -122,9 +135,9 @@ uint32 XTiffReader::ReadDataInTag(TiffTag* T)
 //-----------------------------------------------------------------------------
 // Lecture des donnees stockees dans un tag
 //-----------------------------------------------------------------------------
-uint32 XTiffReader::ReadIdTag(eTagID id, uint32 defaut)
+uint32 XBigTiffReader::ReadIdTag(eTagID id, uint32 defaut)
 {
-  TiffTag T;
+  BigTiffTag T;
   if (!FindTag(id, &T))
     return defaut;
   return ReadDataInTag(&T);
@@ -133,9 +146,9 @@ uint32 XTiffReader::ReadIdTag(eTagID id, uint32 defaut)
 //-----------------------------------------------------------------------------
 // Lecture d'un tableau de donnees
 //-----------------------------------------------------------------------------
-bool XTiffReader::ReadDataArray(std::istream* in, eTagID id, void* V, int size)
+bool XBigTiffReader::ReadDataArray(std::istream* in, eTagID id, void* V, int size)
 {
-  TiffTag T;
+  BigTiffTag T;
   if (!FindTag(id, &T))
     return false;
   uint32 datasize = DataSize(&T);
@@ -143,7 +156,8 @@ bool XTiffReader::ReadDataArray(std::istream* in, eTagID id, void* V, int size)
     ::memcpy(V, &T.DataOffset, datasize);
     return true;
   }
-  in->seekg(T.DataOffset);
+  //in->seekg(T.DataOffset);
+  XFile::Seek(in, T.DataOffset);
   m_Endian.ReadArray(in, m_bByteOrder, V, size, T.DataCount);
  
   return in->good();
@@ -152,9 +166,9 @@ bool XTiffReader::ReadDataArray(std::istream* in, eTagID id, void* V, int size)
 //-----------------------------------------------------------------------------
 // Lecture d'un tableau de SHORT ou LONG
 //-----------------------------------------------------------------------------
-uint32* XTiffReader::ReadUintArray(std::istream* in, eTagID id, uint32* nb_elt)
+uint32* XBigTiffReader::ReadUintArray(std::istream* in, eTagID id, uint32* nb_elt)
 {
-  TiffTag T;
+  BigTiffTag T;
   if (!FindTag(id, &T))
     return NULL;
   uint32 datasize = DataSize(&T);
@@ -171,7 +185,8 @@ uint32* XTiffReader::ReadUintArray(std::istream* in, eTagID id, uint32* nb_elt)
     if (T.DataCount > 1) V[1] = *ptr;
     return V;
   }
-  in->seekg(T.DataOffset);
+  //in->seekg(T.DataOffset);
+  XFile::Seek(in, T.DataOffset);
   if (T.DataType == LONG) {
     m_Endian.ReadArray(in, m_bByteOrder, V, sizeof(uint32), T.DataCount);
     return V;
@@ -190,11 +205,73 @@ uint32* XTiffReader::ReadUintArray(std::istream* in, eTagID id, uint32* nb_elt)
 }
 
 //-----------------------------------------------------------------------------
+// Lecture d'un tableau de SHORT, LONG ou LONG8
+//-----------------------------------------------------------------------------
+uint64* XBigTiffReader::ReadUint64Array(std::istream* in, eTagID id, uint32* nb_elt)
+{
+  BigTiffTag T;
+  if (!FindTag(id, &T))
+    return NULL;
+  uint32 datasize = DataSize(&T);
+  if ((T.DataType != SHORT) && (T.DataType != LONG) && (T.DataType != LONG8))
+    return NULL;
+  uint64* V = new uint64[T.DataCount];
+  if (V == NULL)
+    return NULL;
+  *nb_elt = T.DataCount;
+  if (datasize <= 8) {  // Cas ou le DataOffset contient le tableau
+    byte* ptr = (byte*)&(T.DataOffset);
+    for (uint32 i = 0; i < T.DataCount; i++) {
+      if (T.DataType == SHORT)
+        V[i] = *((uint16*)ptr);
+      if (T.DataType == LONG)
+        V[i] = *((uint32*)ptr);
+      if (T.DataType == LONG8)
+        V[i] = *((uint64*)ptr);
+      ptr += TypeSize((eDataType)T.DataType);
+    }
+    return V;
+  }
+  //in->seekg(T.DataOffset);
+  XFile::Seek(in, T.DataOffset);
+  // Cas LONG8
+  if (T.DataType == LONG8) {
+    m_Endian.ReadArray(in, m_bByteOrder, V, sizeof(uint64), T.DataCount);
+    return V;
+  }
+
+  // Cas LONG
+  if (T.DataType == LONG) {
+    uint32* data32 = new uint32[T.DataCount];
+    if (data32 == NULL) {
+      delete[] V;
+      return NULL;
+    }
+    m_Endian.ReadArray(in, m_bByteOrder, data32, sizeof(uint32), T.DataCount);
+    for (uint32 i = 0; i < T.DataCount; i++)
+      V[i] = data32[i];
+    delete[] data32;
+    return V;
+  }
+  // Cas SHORT
+  uint16* data16 = new uint16[T.DataCount];
+  if (data16 == NULL) {
+    delete[] V;
+    return NULL;
+  }
+  m_Endian.ReadArray(in, m_bByteOrder, data16, sizeof(uint16), T.DataCount);
+  for (uint32 i = 0; i < T.DataCount; i++)
+    V[i] = data16[i];
+  delete[] data16;
+  return V;
+}
+
+//-----------------------------------------------------------------------------
 // Analyse d'un IFD
 //-----------------------------------------------------------------------------
-bool XTiffReader::AnalyzeIFD(std::istream* in)
+bool XBigTiffReader::AnalyzeIFD(std::istream* in)
 {
-  TiffTag T;
+  BigTiffTag T;
   Clear();
 
   m_nWidth = ReadIdTag(IMAGEWIDTH);
@@ -222,46 +299,11 @@ bool XTiffReader::AnalyzeIFD(std::istream* in)
     }
   }
 
-  // Lecture des offsets des strips
-  uint32* array = ReadUintArray(in, STRIPOFFSETS, &m_nNbStripOffsets);
-  if (array != NULL) {
-    m_StripOffsets = new uint64[m_nNbStripOffsets];
-    for (uint32 i = 0; i < m_nNbStripOffsets; i++)
-      m_StripOffsets[i] = array[i];
-    delete[] array;
-  }
-  else
-    m_StripOffsets = NULL;
-  // Lecture des tailles des strips
-  array = ReadUintArray(in, STRIPBYTECOUNTS, &m_nNbStripCounts);
-  if (array != NULL) {
-    m_StripCounts = new uint64[m_nNbStripCounts];
-    for (uint32 i = 0; i < m_nNbStripCounts; i++)
-      m_StripCounts[i] = array[i];
-    delete[] array;
-  }
-  else
-    m_StripCounts = NULL;
-  // Lecture des offsets des tiles
-  array = ReadUintArray(in, TILEOFFSETS, &m_nNbTileOffsets);
-  if (array != NULL) {
-    m_TileOffsets = new uint64[m_nNbTileOffsets];
-    for (uint32 i = 0; i < m_nNbTileOffsets; i++)
-      m_TileOffsets[i] = array[i];
-    delete[] array;
-  }
-  else
-    m_TileOffsets = NULL;
-  // Lecture des tailles des tiles
-  array = ReadUintArray(in, TILEBYTECOUNTS, &m_nNbTileCounts);
-  if (array != NULL) {
-    m_TileCounts = new uint64[m_nNbTileCounts];
-    for (uint32 i = 0; i < m_nNbTileCounts; i++)
-      m_TileCounts[i] = array[i];
-    delete[] array;
-  }
-  else
-    m_TileCounts = NULL;
+  // Lecture des tableaux
+  m_StripOffsets = ReadUint64Array(in, STRIPOFFSETS, &m_nNbStripOffsets);
+  m_StripCounts = ReadUint64Array(in, STRIPBYTECOUNTS, &m_nNbStripCounts);
+  m_TileOffsets = ReadUint64Array(in, TILEOFFSETS, &m_nNbTileOffsets);
+  m_TileCounts = ReadUint64Array(in, TILEBYTECOUNTS, &m_nNbTileCounts);
 
   // Lecture de la table des couleurs (image palette)
   if (m_nPhotInt == (uint16)RGBPALETTE) {
@@ -327,7 +369,7 @@ bool XTiffReader::AnalyzeIFD(std::istream* in)
 //-----------------------------------------------------------------------------
 // Impression des informations brutes des IFD
 //-----------------------------------------------------------------------------
-void XTiffReader::PrintIFDTag(std::ostream* out)
+void XBigTiffReader::PrintIFDTag(std::ostream* out)
 {
   for (uint32 i = 0; i < m_IFD.size(); i++) {
     *out << "*********" << std::endl << "IFD " << i << "\tType\tCount\tOffset" << std::endl;

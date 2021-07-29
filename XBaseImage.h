@@ -19,6 +19,8 @@ protected:
 	uint32		m_nH;
 	uint16		m_nNbBits;
 	uint16		m_nNbSample;
+  uint16*		m_ColorMap;
+  uint16    m_nColorMapSize;
 
 	// Georeferencement
 	double		m_dX0;
@@ -34,6 +36,15 @@ public:
 	inline uint32 H() { return m_nH; }
 	inline uint16 NbBits() { return m_nNbBits; }
 	inline uint16 NbSample() { return m_nNbSample; }
+
+  // Metadonnees
+  virtual std::string Format() { return "Undefined";}
+	virtual std::string Metadata();
+  virtual std::string XmlMetadata() { return "";}
+
+  // Palette de couleurs
+  uint16 ColorMapSize() { return m_nColorMapSize;}
+  uint16* ColorMap() { return m_ColorMap;}
 
 	// Georeferencement de l'image
 	inline double GSD() { return m_dGSD; }

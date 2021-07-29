@@ -8,7 +8,10 @@
 //-----------------------------------------------------------------------------
 
 #include "XCogImage.h"
+#include <sstream>
 
+#include "XBigTiffReader.h"
+#include "XTiffReader.h"
 
 //-----------------------------------------------------------------------------
 // Ouverture d'une image COG
@@ -22,6 +25,22 @@ void XCogImage::Clear()
   for (uint32 i = 0; i < m_TImages.size(); i++)
     delete m_TImages[i];
   m_TImages.clear();
+  if (m_Reader != NULL)
+    delete m_Reader;
+  m_Reader = NULL;
+}
+
+//-----------------------------------------------------------------------------
+// Metadonnees de l'image sous forme de cles / valeurs
+//-----------------------------------------------------------------------------
+std::string XCogImage::Metadata()
+{
+  std::ostringstream out;
+  out << XBaseImage::Metadata();
+  out << "Nb Images:" << m_TImages.size() << ";";
+  for (uint32 i = 0; i < m_TImages.size(); i++)
+    out << m_TImages[i]->Metadata();
+  return out.str();
 }
 
 //-----------------------------------------------------------------------------
@@ -30,36 +49,56 @@ void XCogImage::Clear()
 bool XCogImage::Open(XFile* file)
 {
   Clear();
+  XTiffReader* tiffReader = new XTiffReader;
+  XBigTiffReader* bigReader = new XBigTiffReader;
 
-  if (!m_Reader.Read(file->IStream()))
+  // Ouverture du fichier et analyse de l'entete
+  if (!tiffReader->Read(file->IStream())) { // Pas du TIFF classique
+    delete tiffReader;
+    file->Seek(0);
+    if (!bigReader->Read(file->IStream())) { // Pas du BigTIFF
+      delete bigReader;
+      return false;
+    }
+    else
+      m_Reader = bigReader;
+  }
+  else
+    m_Reader = tiffReader;
+
+  if (m_Reader->NbIFD() < 2) {// Image TIFF standard
+    Clear();
     return false;
-  if (m_Reader.NbIFD() < 2) // Image TIFF standard
-    return false;
+  }
 
   // Analyse des IFD
-  m_Reader.SetActiveIFD(0);
-  if (!m_Reader.AnalyzeIFD(file->IStream()))
+  m_Reader->SetActiveIFD(0);
+  if (!m_Reader->AnalyzeIFD(file->IStream())) {
+    Clear();
     return false;
-  if (m_Reader.RowsPerStrip() > 0)  // Image en strip => pas du COG
+  }
+  if (m_Reader->RowsPerStrip() > 0) {  // Image en strip => pas du COG
+    Clear();
     return false;
+  }
 
-  m_nW = m_Reader.Width();
-  m_nH = m_Reader.Height();
-  m_nNbBits = m_Reader.NbBits();
-  m_nNbSample = m_Reader.NbSample();
-  m_dX0 = m_Reader.X0();
-  m_dY0 = m_Reader.Y0();
-  m_dGSD = m_Reader.GSD();
+  m_nW = m_Reader->Width();
+  m_nH = m_Reader->Height();
+  m_nNbBits = m_Reader->NbBits();
+  m_nNbSample = m_Reader->NbSample();
+  m_dX0 = m_Reader->X0();
+  m_dY0 = m_Reader->Y0();
+  m_dGSD = m_Reader->GSD();
 
   m_Factor.push_back(1);
-  for (uint32 i = 1; i < m_Reader.NbIFD(); i++) {
-    m_Reader.SetActiveIFD(i);
-    if (!m_Reader.AnalyzeIFD(file->IStream()))
+  for (uint32 i = 1; i < m_Reader->NbIFD(); i++) {
+    m_Reader->SetActiveIFD(i);
+    if (!m_Reader->AnalyzeIFD(file->IStream()))
       return false;
-    if ((m_Reader.Width() == 0) || (m_Reader.Height() == 0))
+    if ((m_Reader->Width() == 0) || (m_Reader->Height() == 0))
       break;
-    uint32 factorW = XRint((double)m_nW / (double)m_Reader.Width());
-    uint32 factorH = XRint((double)m_nH / (double)m_Reader.Height());
+    uint32 factorW = XRint((double)m_nW / (double)m_Reader->Width());
+    uint32 factorH = XRint((double)m_nH / (double)m_Reader->Height());
     if (factorW != factorH) {
       Clear();
       return false;
@@ -74,9 +113,9 @@ bool XCogImage::Open(XFile* file)
       Clear();
       return false;
     }
-    m_Reader.SetActiveIFD(i);
-    m_Reader.AnalyzeIFD(file->IStream());
-    if (!image->SetTiffReader(&m_Reader)) {
+    m_Reader->SetActiveIFD(i);
+    m_Reader->AnalyzeIFD(file->IStream());
+    if (!image->SetTiffReader(m_Reader)) {
       delete image;
       Clear();
       return false;

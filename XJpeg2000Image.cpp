@@ -95,7 +95,6 @@ XJpeg2000Image::XJpeg2000Image(const char* filename)
   jpx_codestream_source code_source = m_Jpx_in->access_codestream(0);
   jp2_dimensions dim = code_source.access_dimensions();
   m_nBitDepth = dim.get_bit_depth(0);
-  m_strMetadata = std::string("%1 bits de profondeur, %2 canaux");// .arg(m_nBitDepth).arg(dim.get_num_components());
 
   if (m_nBitDepth > 8) {
     m_FloatCompositor = new XKduRegionCompositor;

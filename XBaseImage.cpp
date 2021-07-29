@@ -8,6 +8,7 @@
 //-----------------------------------------------------------------------------
 
 #include <cstring>
+#include <sstream>
 #include "XBaseImage.h"
 
 //-----------------------------------------------------------------------------
@@ -18,6 +19,8 @@ XBaseImage::XBaseImage()
 	m_nW = m_nH = 0;
 	m_dX0 = m_dY0 = m_dGSD = 0.;
 	m_nNbBits = m_nNbSample = 0;
+  m_ColorMap = NULL;
+  m_nColorMapSize = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -25,7 +28,8 @@ XBaseImage::XBaseImage()
 //-----------------------------------------------------------------------------
 XBaseImage::~XBaseImage()
 {
-
+  if (m_ColorMap != NULL)
+    delete[] m_ColorMap;
 }
 
 //-----------------------------------------------------------------------------
@@ -38,6 +42,18 @@ uint32 XBaseImage::PixSize()
 	if (m_nNbBits == 1)	// Les images 1 bit sont renvoyees en 8 bits
 		return m_nNbSample;
 	return 0;		// On ne gere pas en standard les images 4 bits, 12 bits ...
+}
+
+//-----------------------------------------------------------------------------
+// Metadonnees de l'image sous forme de cles / valeurs
+//-----------------------------------------------------------------------------
+std::string XBaseImage::Metadata()
+{
+	std::ostringstream out;
+	out << "Largeur:" << m_nW << ";Hauteur:" << m_nH << ";Nb Bits:" << m_nNbBits
+		<< ";Nb Sample:" << m_nNbSample << ";Xmin:" << m_dX0 << ";Ymax:" << m_dY0
+    << ";GSD:" << m_dGSD <<";";
+	return out.str();
 }
 
 //-----------------------------------------------------------------------------

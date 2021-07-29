@@ -18,7 +18,9 @@ public:
 	XTiffTileImage();
 	virtual ~XTiffTileImage() { Clear(); }
 
-	bool SetTiffReader(XTiffReader* reader);
+  virtual std::string Format() { return "TIFF";}
+  virtual std::string Metadata();
+  bool SetTiffReader(XBaseTiffReader* reader);
 
 	virtual bool GetArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area);
 	virtual bool GetLine(XFile* file, uint32 num, byte* area);
@@ -41,9 +43,8 @@ protected:
 	uint16		m_nPhotInt;
 	uint16		m_nCompression;
 	uint16		m_nPredictor;
-	uint32*		m_TileOffsets;
-	uint32*		m_TileCounts;
-	uint16*		m_ColorMap;
+	uint64*		m_TileOffsets;
+	uint64*		m_TileCounts;
 	byte*			m_JpegTables;
 	uint32		m_nJpegTablesSize;
 

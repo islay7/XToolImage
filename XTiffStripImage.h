@@ -18,7 +18,9 @@ public:
 	XTiffStripImage();
 	virtual ~XTiffStripImage() { Clear(); }
 
-	bool SetTiffReader(XTiffReader* reader);
+  virtual std::string Format() { return "TIFF";}
+  virtual std::string Metadata();
+  bool SetTiffReader(XBaseTiffReader* reader);
 
 	virtual bool GetArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, byte* area);
 	virtual bool GetLine(XFile* file, uint32 num, byte* area);
@@ -39,9 +41,8 @@ protected:
 	uint16		m_nPhotInt;
 	uint16		m_nCompression;
 	uint16		m_nPredictor;
-	uint32*		m_StripOffsets;
-	uint32*		m_StripCounts;
-	uint16*		m_ColorMap;
+	uint64*		m_StripOffsets;
+	uint64*		m_StripCounts;
 	byte*			m_JpegTables;
 	uint32		m_nJpegTablesSize;
 

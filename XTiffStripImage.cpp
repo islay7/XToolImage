@@ -8,6 +8,7 @@
 //-----------------------------------------------------------------------------
 
 #include <cstring>
+#include <sstream>
 #include "XTiffStripImage.h"
 #include "XLzwCodec.h"
 #include "XZlibCodec.h"
@@ -50,16 +51,29 @@ void XTiffStripImage::Clear()
 	m_JpegTables = NULL;
 
 	m_nW = m_nH = m_nRowsPerStrip = m_nNbStrip = 0;
-	m_nPixSize = m_nPhotInt = m_nCompression = m_nPredictor = 0;
+  m_nPixSize = m_nPhotInt = m_nCompression = m_nPredictor = m_nColorMapSize = 0;
 	m_dX0 = m_dY0 = m_dGSD = 0.;
 	m_nLastStrip = 0xFFFFFFFF;
 	m_nJpegTablesSize = 0;
 }
 
 //-----------------------------------------------------------------------------
+// Metadonnees de l'image sous forme de cles / valeurs
+//-----------------------------------------------------------------------------
+std::string XTiffStripImage::Metadata()
+{
+  std::ostringstream out;
+  out << XBaseImage::Metadata();
+  out << "Nb Strip:" << m_nNbStrip << ";RowsPerStrip:" << m_nRowsPerStrip
+    << ";Compression:" << XTiffReader::CompressionString(m_nCompression)
+    << ";PhotInt:" << XTiffReader::PhotIntString(m_nPhotInt) << ";";
+  return out.str();
+}
+
+//-----------------------------------------------------------------------------
 // Fixe les caracteristiques de l'image
 //-----------------------------------------------------------------------------
-bool XTiffStripImage::SetTiffReader(XTiffReader* reader)
+bool XTiffStripImage::SetTiffReader(XBaseTiffReader* reader)
 {
 	if (reader->RowsPerStrip() < 1)
 		return false;
@@ -68,6 +82,7 @@ bool XTiffStripImage::SetTiffReader(XTiffReader* reader)
 	if (!reader->GetStripInfo(&m_nNbStrip, &m_StripOffsets, &m_StripCounts))
 		return false;
 	reader->GetJpegTablesInfo(&m_JpegTables, &m_nJpegTablesSize);
+  reader->GetColorMap(&m_ColorMap, &m_nColorMapSize);
 
 	m_nW = reader->Width();
 	m_nH = reader->Height();

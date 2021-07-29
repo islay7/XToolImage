@@ -8,6 +8,7 @@
 //-----------------------------------------------------------------------------
 
 #include <cstring>
+#include <sstream>
 #include "XTiffTileImage.h"
 #include "XLzwCodec.h"
 #include "XZlibCodec.h"
@@ -52,16 +53,29 @@ void XTiffTileImage::Clear()
 	m_JpegTables = NULL;
 
 	m_nW = m_nH = m_nTileWidth = m_nTileHeight = m_nNbTile = 0;
-	m_nPixSize = m_nPhotInt = m_nCompression = m_nPredictor = 0;
+  m_nPixSize = m_nPhotInt = m_nCompression = m_nPredictor = m_nColorMapSize = 0;
 	m_dX0 = m_dY0 = m_dGSD = 0.;
 	m_nLastTile = 0xFFFFFFFF;
 	m_nJpegTablesSize = 0;
 }
 
 //-----------------------------------------------------------------------------
+// Metadonnees de l'image sous forme de cles / valeurs
+//-----------------------------------------------------------------------------
+std::string XTiffTileImage::Metadata()
+{
+  std::ostringstream out;
+  out << XBaseImage::Metadata();
+  out << "Nb Tiles:" << m_nNbTile << ";TileW:" << m_nTileWidth << ";TileH:" << m_nTileHeight
+    << ";Compression:" << XTiffReader::CompressionString(m_nCompression)
+    << ";PhotInt:" << XTiffReader::PhotIntString(m_nPhotInt) << ";";
+  return out.str();
+}
+
+//-----------------------------------------------------------------------------
 // Fixe les caracteristiques de l'image
 //-----------------------------------------------------------------------------
-bool XTiffTileImage::SetTiffReader(XTiffReader* reader)
+bool XTiffTileImage::SetTiffReader(XBaseTiffReader* reader)
 {
 	if ((reader->TileWidth() < 1) || (reader->TileHeight() < 1))
 		return false;

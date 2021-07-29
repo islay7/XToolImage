@@ -37,7 +37,6 @@ protected:
   kdu_region_compositor*    m_Compositor;
   jp2_family_src*           m_Src;
   std::string							  m_strXmlMetadata;
-  std::string               m_strMetadata;
   int                       m_nBitDepth;
   XKduRegionCompositor*     m_FloatCompositor;
 
@@ -49,6 +48,7 @@ public:
   XJpeg2000Image(const char* filename);
   virtual ~XJpeg2000Image();
 
+  virtual std::string Format() { return "JP2";}
   bool IsValid() { return m_bValid; }
   virtual inline bool NeedFile() { return false; }
 
@@ -66,8 +66,7 @@ public:
   virtual bool GetRawArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, float* pix,
     uint32* nb_sample, uint32 factor = 1);
 
-  virtual std::string GetMetadata() { return m_strMetadata; }
-  virtual std::string GetXmlMetadata() { return m_strXmlMetadata; }
+  virtual std::string XmlMetadata() { return m_strXmlMetadata; }
 };
 
 #endif //XJPEG2000IMAGE_H
