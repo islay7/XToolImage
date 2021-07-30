@@ -68,9 +68,14 @@ public:
 	// Methodes statiques de manipulation de pixels
 	static bool CMYK2RGB(byte* buffer, uint32 w, uint32 h);
 	static bool Uint16To8bits(byte* buffer, uint32 w, uint32 h, uint16 min = 0, uint16 max = 0);
+  static bool ExtractArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 wout, uint32 hout, uint32 x0, uint32 y0);
 	static bool ZoomArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 wout, uint32 hout, uint32 nbbyte);
 	static void SwitchRGB2BGR(byte* buf, uint32 buf_size);
 	static bool RotateArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 nbbyte, uint32 rot);
+  static void Normalize(byte* pix_in, double* pix_out, uint32 nb_pixel, double* mean, double* std_dev);
+  static double Covariance(double* pix1, double* pix2, uint32 nb_pixel);
+  static bool Correlation(byte* pix1, uint32 w1, uint32 h1, byte* pix2, uint32 w2, uint32 h2,
+                          double* u, double* v, double* pic);
 
 };
 

@@ -203,6 +203,25 @@ bool XBaseImage::Uint16To8bits(byte* buffer, uint32 w, uint32 h, uint16 min, uin
 }
 
 //-----------------------------------------------------------------------------
+// Extraction d'une zone de pixels
+//-----------------------------------------------------------------------------
+bool XBaseImage::ExtractArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 wout, uint32 hout,
+                             uint32 x0, uint32 y0)
+{
+  if (x0 + wout > win) return false;
+  if (y0 + hout > hin) return false;
+
+  byte* buf_in = &in[y0 * win + x0];
+  byte* buf_out= out;
+  for (uint32 i = 0; i < hout; i++) {
+    ::memcpy(buf_out, buf_in, wout);
+    buf_in += win;
+    buf_out+= wout;
+  }
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 // Zoom sur un buffer de pixels
 //-----------------------------------------------------------------------------
 bool XBaseImage::ZoomArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 wout, uint32 hout, uint32 nbbyte)
@@ -291,4 +310,93 @@ bool XBaseImage::RotateArea(byte* in, byte* out, uint32 win, uint32 hin, uint32 
 	}
 
 	return false;
+}
+
+//-----------------------------------------------------------------------------
+// Normalisation d'une zone de pixels et recuperation des statistiques
+//-----------------------------------------------------------------------------
+void XBaseImage::Normalize(byte* pix_in, double* pix_out, uint32 nb_pixel, double* mean, double* std_dev)
+{
+  *mean = 0.0;
+  *std_dev = 0.0;
+  for (uint32 i = 0;  i < nb_pixel; i++)
+    (*mean) += (double)pix_in[i];
+  (*mean) /= (double)nb_pixel;
+  for (uint32 i = 0;  i < nb_pixel; i++) {
+    pix_out[i] = (double)pix_in[i] - (*mean);
+    (*std_dev) += (pix_out[i] * pix_out[i]);
+  }
+  (*std_dev) /= (double)nb_pixel;
+}
+
+//-----------------------------------------------------------------------------
+// Covariance entre deux zones de pixels
+//-----------------------------------------------------------------------------
+double XBaseImage::Covariance(double* pix1, double* pix2, uint32 nb_pixel)
+{
+  double cov = 0.0;
+  for (uint32 i = 0; i < nb_pixel; i++)
+    cov += (pix1[i] * pix2[i]);
+  return (cov / (double)nb_pixel);
+}
+
+//-----------------------------------------------------------------------------
+// Fonction de correlation
+//-----------------------------------------------------------------------------
+bool XBaseImage::Correlation(byte* pix1, uint32 w1, uint32 h1,
+                             byte* pix2, uint32 w2, uint32 h2,
+                             double* u, double* v, double* pic)
+{
+  double *win1, *win2;	// Fenetres de correlation
+  double *correl;				// Valeurs de correlation
+  double mean1, dev1, mean2, dev2, cov, a, b;
+  uint32 i, j, k, n = 0, lin, col;
+  byte *buf;
+
+  win1 = new double[w1 * h1];
+  win2 = new double[w1 * h1];
+  if ((win1 == NULL)||(win2 == NULL))
+    return false;
+  correl = new double[(h2 - h1 + 1)*(w2 - w1 + 1)];
+  buf = new byte[w1 * h1];
+  if ((correl == NULL)||(buf == NULL))
+    return false;
+  Normalize(pix1, win1, w1 * h1, &mean1, &dev1);
+  if (dev1 == 0.0)
+    return false;
+
+  *pic = 0;
+  for (i = 0; i < h2 - h1; i++)
+    for (j = 0; j < w2 - w1; j++) {
+      ExtractArea(pix2, buf, w2, h2, w1, h1, j, i);
+      Normalize(buf, win2,  w1 * h1, &mean2, &dev2);
+      if (dev2 == 0.0)
+        continue;
+      cov = Covariance(win1, win2, w1 * h1);
+      correl[n] = cov / sqrt(dev1 * dev2);
+      if (correl[n] > *pic) {
+        k = n;
+        *pic = correl[n];
+        lin = i;
+        col = j;
+      }
+      n++;
+    }
+
+  delete[] win1;
+  delete[] win2;
+  delete[] buf;
+
+  a = correl[k-1] - *pic;
+  b = correl[k+1] - *pic;
+  a = (a - b) / (2.0 * (a + b));
+  *u = (double)col + a + (double)w1 * 0.5;
+  j = w2 - w1 + 1;
+  a = correl[k-j] - *pic;
+  b = correl[k+j] - *pic;
+  a = (a - b) / (2.0 * (a + b));
+  *v = (double)lin + a + (double)h1 * 0.5;
+
+  delete[] correl;
+  return true;
 }
