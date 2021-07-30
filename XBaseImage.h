@@ -45,6 +45,7 @@ public:
   // Palette de couleurs
   uint16 ColorMapSize() { return m_nColorMapSize;}
   uint16* ColorMap() { return m_ColorMap;}
+  bool ApplyColorMap(byte* in, byte* out, uint32 w, uint32 h);
 
 	// Georeferencement de l'image
 	inline double GSD() { return m_dGSD; }

@@ -129,6 +129,26 @@ bool XBaseImage::GetRawPixel(XFile* file, uint32 x, uint32 y, uint32 win, double
 }
 
 //-----------------------------------------------------------------------------
+// Application d'une palette de couleurs
+//-----------------------------------------------------------------------------
+bool XBaseImage::ApplyColorMap(byte* in, byte* out, uint32 w, uint32 h)
+{
+  if ((m_ColorMap == NULL)||(m_nColorMapSize < 3*256))
+    return false;
+  byte *ptr_in = in, *ptr_out = out;
+  for (uint32 i = 0; i < h; i++) {
+    for (uint32 j = 0; j < w; j++) {
+      ptr_out[0] = m_ColorMap[*ptr_in];
+      ptr_out[1] = m_ColorMap[*ptr_in + 256];
+      ptr_out[2] = m_ColorMap[*ptr_in + 512];
+      ptr_out += 3;
+      ptr_in++;
+    }
+  }
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 // Conversion CMYK -> RGB
 //-----------------------------------------------------------------------------
 bool XBaseImage::CMYK2RGB(byte* buffer, uint32 w, uint32 h)
