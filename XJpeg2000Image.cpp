@@ -304,8 +304,8 @@ bool XJpeg2000Image::GetJp2Area(uint32 x, uint32 y, uint32 w, uint32 h, byte* ar
 bool XJpeg2000Image::GetRawPixel(XFile* file, uint32 x, uint32 y, uint32 win, double* pix,
   uint32* nb_sample)
 {
-  //if (m_nBitDepth <= 8)
-  //  return XImage::GetRawPixel(file, x, y, win, pix, nb_sample);
+  if (m_nBitDepth <= 8)
+    return XBaseImage::GetRawPixel(file, x, y, win, pix, nb_sample);
 
   if ((win > x) || (win > y))
     return false;
@@ -351,7 +351,7 @@ bool XJpeg2000Image::GetRawArea(XFile* file, uint32 x, uint32 y, uint32 w, uint3
   uint32* nb_sample, uint32 factor)
 {
   if (m_nBitDepth <= 8)
-    return false;
+    return XBaseImage::GetRawArea(file, x, y, w, h, pix, nb_sample, factor);
 
   if ((x + w > m_nW) || (y + h > m_nH))
     return false;

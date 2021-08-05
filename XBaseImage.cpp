@@ -138,9 +138,9 @@ bool XBaseImage::ApplyColorMap(byte* in, byte* out, uint32 w, uint32 h)
   byte *ptr_in = in, *ptr_out = out;
   for (uint32 i = 0; i < h; i++) {
     for (uint32 j = 0; j < w; j++) {
-      ptr_out[0] = m_ColorMap[*ptr_in];
-      ptr_out[1] = m_ColorMap[*ptr_in + 256];
-      ptr_out[2] = m_ColorMap[*ptr_in + 512];
+      ptr_out[0] = m_ColorMap[*ptr_in] / 256;
+      ptr_out[1] = m_ColorMap[*ptr_in + 256] / 256;
+      ptr_out[2] = m_ColorMap[*ptr_in + 512] / 256;
       ptr_out += 3;
       ptr_in++;
     }
@@ -350,24 +350,26 @@ bool XBaseImage::Correlation(byte* pix1, uint32 w1, uint32 h1,
   double *win1, *win2;	// Fenetres de correlation
   double *correl;				// Valeurs de correlation
   double mean1, dev1, mean2, dev2, cov, a, b;
-  uint32 i, j, k, n = 0, lin, col;
+  uint32 k = 0, n = 0, lin = 0, col = 0;
   byte *buf;
 
   win1 = new double[w1 * h1];
   win2 = new double[w1 * h1];
-  if ((win1 == NULL)||(win2 == NULL))
-    return false;
   correl = new double[(h2 - h1 + 1)*(w2 - w1 + 1)];
   buf = new byte[w1 * h1];
-  if ((correl == NULL)||(buf == NULL))
+  if ((win1 == NULL)||(win2 == NULL)||(correl == NULL)||(buf == NULL)){
+    delete[] win1; delete[] win2; delete[] correl; delete[] buf;
     return false;
+  }
   Normalize(pix1, win1, w1 * h1, &mean1, &dev1);
-  if (dev1 == 0.0)
+  if (dev1 == 0.0) {
+    delete[] win1; delete[] win2; delete[] correl; delete[] buf;
     return false;
+  }
 
-  *pic = 0;
-  for (i = 0; i < h2 - h1; i++)
-    for (j = 0; j < w2 - w1; j++) {
+  *pic = 0.0;
+  for (uint32 i = 0; i < h2 - h1; i++)
+    for (uint32 j = 0; j < w2 - w1; j++) {
       ExtractArea(pix2, buf, w2, h2, w1, h1, j, i);
       Normalize(buf, win2,  w1 * h1, &mean2, &dev2);
       if (dev2 == 0.0)
@@ -387,13 +389,18 @@ bool XBaseImage::Correlation(byte* pix1, uint32 w1, uint32 h1,
   delete[] win2;
   delete[] buf;
 
+  if ((k == 0)||(k == ((h2 - h1 + 1)*(w2 - w1 + 1)-1))) {
+    delete[] correl;
+    return false;
+  }
+
   a = correl[k-1] - *pic;
   b = correl[k+1] - *pic;
   a = (a - b) / (2.0 * (a + b));
   *u = (double)col + a + (double)w1 * 0.5;
-  j = w2 - w1 + 1;
-  a = correl[k-j] - *pic;
-  b = correl[k+j] - *pic;
+  uint32 wK = w2 - w1 + 1;
+  a = correl[k-wK] - *pic;
+  b = correl[k+wK] - *pic;
   a = (a - b) / (2.0 * (a + b));
   *v = (double)lin + a + (double)h1 * 0.5;
 
