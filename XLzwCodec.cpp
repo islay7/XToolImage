@@ -45,15 +45,15 @@ XLzwString& XLzwString::operator=(const XLzwString& S)
   return *this;
 }
 
-XLzwString& XLzwString::merge(const XLzwString& A, const XLzwString& B)
+void XLzwString::merge(const XLzwString& A, const XLzwString& B)
 {
   if (m_String == NULL) {
-    m_nAlloc = (A.m_nLength + 1) * 2;
+    m_nAlloc = (A.m_nLength + 1);
     m_String = new byte[m_nAlloc];
   } else {
     if (m_nAlloc < (A.m_nLength + 1)) {
       delete[] m_String;
-      m_nAlloc = (A.m_nLength + 1) * 2;
+      m_nAlloc = (A.m_nLength + 1);
       m_String = new byte[m_nAlloc];
     }
   }
@@ -61,7 +61,23 @@ XLzwString& XLzwString::merge(const XLzwString& A, const XLzwString& B)
   m_nLength = A.m_nLength + 1;
   ::memcpy((void*)m_String, (void*)A.m_String, m_nLength - 1);
   m_String[m_nLength - 1] = B.m_String[0];
-  return *this;
+}
+
+void XLzwString::set(int n, byte* str)
+{
+  if (m_String == NULL) {
+    m_nAlloc = n;
+    m_String = new byte[m_nAlloc];
+  } else {
+    if (m_nAlloc < n) {
+      delete[] m_String;
+      m_nAlloc = n;
+      m_String = new byte[m_nAlloc];
+    }
+  }
+
+  m_nLength = n;
+  ::memcpy((void*)m_String, (void*)str, n);
 }
 
 // Classe CLzwCodec
@@ -69,7 +85,8 @@ XLzwCodec::XLzwCodec()
 {
    m_table = new XLzwString[4096];
   for(int i = 0; i < 256; i++)
-    m_table[i] = XLzwString((byte)i);
+    //m_table[i] = XLzwString((byte)i);
+    m_table[i].set(1, (byte*)&i);
   m_nbbit = 9;	// Le premier code a 9 bits
   m_next = 258;	// 256 et 257 sont reserves pour le ClearCode et le EoiCode
   m_bitpos = 0;
@@ -108,7 +125,8 @@ void XLzwCodec::InitializeTable()
 
 void XLzwCodec::AddStringToTable(int n, byte* chaine)
 {
-  m_table[m_next] = XLzwString(n, chaine);
+  //m_table[m_next] = XLzwString(n, chaine);
+  m_table[m_next].set(n, chaine);
   m_next++;
   if (m_next == 511)
     m_nbbit = 10;

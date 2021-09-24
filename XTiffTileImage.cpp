@@ -14,12 +14,14 @@
 #include "XZlibCodec.h"
 #include "XJpegCodec.h"
 #include "XPackBitsCodec.h"
+#include "XPredictor.h"
 
 // Gestion de la memoire partagee
 byte*     XTiffTileImage::m_gBuffer = NULL;   // Buffer global de lecture
 uint32    XTiffTileImage::m_gBufSize = 0;     // Taille du buffer
 byte*     XTiffTileImage::m_gTile = NULL;     // Tile globale
 uint32    XTiffTileImage::m_gTileSize = 0;    // Taille de la tile globale
+XTiffTileImage* XTiffTileImage::m_gLastImage = NULL; // Derniere image utilisee
 
 //-----------------------------------------------------------------------------
 // Constructeur
@@ -57,6 +59,7 @@ void XTiffTileImage::Clear()
 	m_dX0 = m_dY0 = m_dGSD = 0.;
 	m_nLastTile = 0xFFFFFFFF;
 	m_nJpegTablesSize = 0;
+  if (m_gLastImage == this) m_gLastImage = NULL;
 }
 
 //-----------------------------------------------------------------------------
@@ -67,7 +70,7 @@ std::string XTiffTileImage::Metadata()
   std::ostringstream out;
   out << XBaseImage::Metadata();
   out << "Nb Tiles:" << m_nNbTile << ";TileW:" << m_nTileWidth << ";TileH:" << m_nTileHeight
-    << ";Compression:" << XTiffReader::CompressionString(m_nCompression)
+    << ";Compression:" << XTiffReader::CompressionString(m_nCompression) << ";Predictor:" << m_nPredictor
     << ";PhotInt:" << XTiffReader::PhotIntString(m_nPhotInt) << ";";
   return out.str();
 }
@@ -150,13 +153,14 @@ bool XTiffTileImage::LoadTile(XFile* file, uint32 x, uint32 y)
 	uint32 numTile = y * nbTileW + x;
 	if (numTile > m_nNbTile)
 		return false;
-	if (numTile == m_nLastTile)	// La Tile est deja chargee
+  if ((numTile == m_nLastTile)&&(m_gLastImage == this))	// La Tile est deja chargee
 		return true;
 	file->Seek(m_TileOffsets[numTile]);
   uint32 nBytesRead = file->Read((char*)m_gBuffer, m_TileCounts[numTile]);
 	if (nBytesRead != m_TileCounts[numTile])
 		return false;
 	m_nLastTile = numTile;
+  m_gLastImage = this;
 	if (!Decompress())
 		return false;
 	return PostProcess();
@@ -179,14 +183,18 @@ bool XTiffTileImage::Decompress()
 		XLzwCodec codec;
     codec.SetDataIO(m_gBuffer, m_Tile, m_nTileHeight*m_nTileWidth*m_nPixSize);
 		codec.Decompress();
-		Predictor();
+    //Predictor();
+    XPredictor predictor;
+    predictor.Decode(m_Tile, m_nTileWidth, m_nTileHeight, m_nPixSize, m_nNbBits, m_nPredictor);
 		return true;
 	}
 	if (m_nCompression == XTiffReader::DEFLATE) {
 		XZlibCodec codec;
     bool flag = codec.Decompress(m_gBuffer, m_TileCounts[m_nLastTile], m_Tile, m_nTileWidth * m_nTileHeight * m_nPixSize);
-		Predictor();
-		return flag;
+    //Predictor();
+    XPredictor predictor;
+    predictor.Decode(m_Tile, m_nTileWidth, m_nTileHeight, m_nPixSize, m_nNbBits, m_nPredictor);
+    return flag;
 	}
 	if ((m_nCompression == XTiffReader::JPEG)||(m_nCompression == XTiffReader::JPEGv2)) {
 		XJpegCodec codec;
@@ -206,11 +214,32 @@ bool XTiffTileImage::Decompress()
 void XTiffTileImage::Predictor()
 {
 	if (m_nPredictor == 1) return;
-	if (m_nPredictor == 2) {
+	if (m_nPredictor == 2) { // PREDICTOR_HORIZONTAL
 		uint32 lineW = m_nTileWidth * m_nPixSize;
 		for (uint32 i = 0; i < m_nTileHeight; i++)
 			for (uint32 j = i * lineW; j < (i + 1) * lineW - m_nPixSize; j++)
 				m_Tile[j + m_nPixSize] += m_Tile[j];
+		return;
+	}
+	if (m_nPredictor == 3) { // PREDICTOR_FLOATINGPOINT
+		uint32 lineW = m_nTileWidth * m_nPixSize;
+		byte* buf = new byte[lineW];
+		for (uint32 i = 0; i < m_nTileHeight; i++) {
+			for (uint32 j = i * lineW; j < (i + 1) * lineW - 1; j++)
+				m_Tile[j + 1] += m_Tile[j];
+			std::memcpy(buf, &m_Tile[i * lineW], lineW);
+			byte* ptr_0 = buf;
+			byte* ptr_1 = &buf[m_nTileWidth];
+			byte* ptr_2 = &buf[m_nTileWidth*2];
+			byte* ptr_3 = &buf[m_nTileWidth*3];
+			for (uint32 j = i * lineW; j < (i + 1) * lineW; j += 4) {
+				m_Tile[j] = *ptr_3; ptr_3++;
+				m_Tile[j + 1] = *ptr_2; ptr_2++;
+				m_Tile[j + 2] = *ptr_1; ptr_1++;
+				m_Tile[j + 3] = *ptr_0; ptr_0++;
+			}
+		}
+		delete[] buf;
 		return;
 	}
 }
@@ -294,7 +323,7 @@ bool XTiffTileImage::GetArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h
 	uint32 endY = (uint32)floor((double)(y + h - 1) / (double)m_nTileHeight);
 
   m_Tile = m_gTile;
-  m_nLastTile = 0xFFFFFFFF;
+  //m_nLastTile = 0xFFFFFFFF;
 	for (uint32 i = startY; i <= endY; i++) {
 		for (uint32 j = startX; j <= endX; j++) {
 			if (!LoadTile(file, j, i))
@@ -380,7 +409,7 @@ bool XTiffTileImage::GetZoomArea(XFile* file, uint32 x, uint32 y, uint32 w, uint
 	uint32 endY = (uint32)floor((double)(y + h - 1) / (double)m_nTileHeight);
 
   m_Tile = m_gTile;
-  m_nLastTile = 0xFFFFFFFF;
+  //m_nLastTile = 0xFFFFFFFF;
   for (uint32 i = startY; i <= endY; i++) {
 		for (uint32 j = startX; j <= endX; j++) {
 			if (!LoadTile(file, j, i))
@@ -410,6 +439,8 @@ bool XTiffTileImage::CopyZoomTile(uint32 tX, uint32 tY, uint32 x, uint32 y, uint
 			continue;
 		}
 		uint32 numTileLine = (ycur - tY * m_nTileHeight);
+    if (numTileLine >= m_nTileHeight)
+      break;
 		uint32 xcur = x;
 		for (uint32 numco = 0; numco < wout; numco++) {
 			if ((xcur < tX * m_nTileWidth) || (xcur > (tX + 1) * m_nTileWidth)) {
@@ -417,6 +448,8 @@ bool XTiffTileImage::CopyZoomTile(uint32 tX, uint32 tY, uint32 x, uint32 y, uint
 				continue;
 			}
 			uint32 numTileCol = (xcur - tX * m_nTileWidth);
+      if (numTileCol >= m_nTileWidth)
+        break;
 			::memcpy(&area[(numli * wout + numco) * m_nPixSize], &m_Tile[(numTileLine* m_nTileWidth + numTileCol)* m_nPixSize], m_nPixSize);
 			xcur += factor;
 		}

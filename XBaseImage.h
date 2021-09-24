@@ -36,6 +36,7 @@ public:
 	inline uint32 H() { return m_nH; }
 	inline uint16 NbBits() { return m_nNbBits; }
 	inline uint16 NbSample() { return m_nNbSample; }
+	virtual uint32 RowH() { return 1; }		// Renvoie le groupement de ligne optimal pour l'image
 
   // Metadonnees
   virtual std::string Format() { return "Undefined";}
@@ -64,6 +65,8 @@ public:
 	virtual bool GetRawArea(XFile* file, uint32 x, uint32 y, uint32 w, uint32 h, float* pix,
                           uint32* nb_sample, uint32 factor = 1);
   virtual bool GetRawPixel(XFile* file, uint32 x, uint32 y, uint32 win, double* pix, uint32* nb_sample);
+	virtual bool GetStat(XFile* file, double minVal[4], double maxVal[4], double meanVal[4], uint32 noData[4], 
+											 uint16* nb_sample, double no_data = 0.);
 
 	// Methodes statiques de manipulation de pixels
 	static bool CMYK2RGB(byte* buffer, uint32 w, uint32 h);

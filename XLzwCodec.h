@@ -15,13 +15,14 @@
 #include "../XTool/XBase.h"
 
 class XLzwString {
-  enum { eAlloc = 10};
+  enum { eAlloc = 1};
 protected:
   uint32	m_nLength;
   uint32	m_nAlloc;
   byte*		m_String;
 public:
-  XLzwString() : m_nLength(0) { m_nAlloc = eAlloc; m_String = new byte[m_nAlloc];}
+  //XLzwString() : m_nLength(0) { m_nAlloc = eAlloc; m_String = new byte[m_nAlloc];}
+  XLzwString() : m_nLength(0) { m_nAlloc = 0; m_String = NULL;}
   XLzwString(byte c);
   XLzwString(int n, byte* str);
   ~XLzwString();
@@ -30,7 +31,8 @@ public:
   inline byte* string(void) const {return m_String;}
 
   XLzwString& operator=(const XLzwString&);
-  XLzwString& merge(const XLzwString& A, const XLzwString& B);
+  void merge(const XLzwString& A, const XLzwString& B);
+  void set(int n, byte* str);
 };
 
 class XLzwCodec {

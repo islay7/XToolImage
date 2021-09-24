@@ -9,7 +9,83 @@
 #include "XCogImage.h"
 #include "XDtmShader.h"
 #include "XBigTiffReader.h"
+#include "XFileImage.h"
 
+int TestEnergyLevel()
+{
+  std::string filename;
+  std::cout << "Nom de l'image : ";
+  std::cin >> filename;
+  if (filename.size() < 2)
+    filename = "D:\\Temp\\MNS\\Ortho_RGB.jp2";
+
+  XFileImage image;
+  if (!image.AnalyzeImage(filename)) {
+    std::cerr << "Impossible d'ouvrir l'image" << std::endl;
+    return -1;
+  }
+
+  std::cout << "Nom du fichier de sortie : ";
+  std::cin >> filename;
+  if (filename.size() < 2)
+    filename = "D:\\TestEnergyLevel.tif";
+
+  uint32 W = image.Width();
+  uint32 H = image.Height();
+  float* lineF = new float[W];
+  uint32 win = 5; // La fenetre a une taille de 2 x win + 1
+
+  XTiffWriter writer;
+  double xmin, ymax, gsd;
+  image.GetGeoref(&xmin, &ymax, &gsd);
+  writer.SetGeoTiff(xmin, ymax, gsd);
+  writer.Write(filename.c_str(), W, H, 1, 32);
+  std::ofstream file;
+  file.open(filename.c_str(), std::ios::out | std::ios::binary | std::ios::app);
+
+  byte* area = new byte[W * (2 * win + 1) * image.NbByte()];
+  image.GetArea(0, 0, W, (2 * win + 1), area);
+
+  byte* pix_in = new byte[(2 * win + 1) * (2 * win + 1)];
+  double* pix_out = new double[(2 * win + 1) * (2 * win + 1)];
+  double mean, std_dev;
+  uint32 offset = 0;
+  if (image.NbByte() > 1)
+    offset = 1;
+
+  for (uint32 i = 0; i < H; i++) {
+    ::memset(lineF, 0, W * sizeof(float));
+    if ((i <= win) || (i >= H - win)) {
+      file.write((char*)lineF, W * sizeof(float));
+      continue;
+    }
+    for (uint32 j = 0; j < W; j++) {
+      if ((j <= win) || (j >= H - win)) {
+        lineF[j] = 0.;
+        continue;
+      }
+      
+      for (uint32 k = 0; k < (2 * win + 1); k++)
+        for (uint32 p = 0; p < (2 * win + 1); p++)
+          pix_in[k * (2 * win + 1) + p] = area[k * W * image.NbByte() + (j - win + p) * image.NbByte() + offset];
+
+      XBaseImage::Normalize(pix_in, pix_out, (2 * win + 1) * (2 * win + 1), &mean, &std_dev);
+      lineF[j] = (float)std_dev;
+    }
+    file.write((char*)lineF, W * sizeof(float));
+
+    ::memmove(area, &area[W * image.NbByte()], W * (2 * win) * image.NbByte());
+    image.GetArea(0, i + win + 1, W, 1, &area[W * (2 * win) * image.NbByte()]);
+  }
+
+  delete[] pix_out;
+  delete[] pix_in;
+  delete[] area;
+  delete[] lineF;
+
+
+  return 0;
+}
 
 int TestRotation()
 {
@@ -420,6 +496,16 @@ bool TestTifImage(std::string file_in, std::string file_out)
     image = strip_image;
   }
 
+  // Lecture des statistiques
+  double minVal[4], maxVal[4], meanVal[4];
+  uint32 noData[4];
+  uint16 nbSpl;
+  image->GetStat(&file, minVal, maxVal, meanVal, noData, &nbSpl);
+  for (uint16 i = 0; i < nbSpl; i++) {
+    std::cout << "Canal " << i << " : " << "min = " << minVal[i] << "\tmax = " << maxVal[i]
+      << "\tmean = " << meanVal[i] << std::endl;
+  }
+
   uint32 W = XMin(image->W(), (uint32)2000), H = XMin(image->H(), (uint32)2000), X0 = 0, Y0 = 0;
   byte* area = image->AllocArea(W, H);
   std::memset(area, 255, W * H * image->PixSize());
@@ -573,10 +659,14 @@ int main()
 {
   //BuildTestImage();
   std::cout << "Hello World!\n";
+
+  //return TestEnergyLevel();
  
   //PrintBigTifInfo();
 
-  TestZoomCog();
+  //TestZoomCog();
+  //TestTifImage("D:\\Temp\\MNT LZW\\MNE_18FD3325_365_6383.TIF", "MNE_18FD3325_365_6383.TIF");
+  TestTifImage("C:\\Users\\FBecirspahic\\Downloads\\RGEALTI_FXX_073_675_MNT_LAMB93_IGN69.tif", "RGEALTI_FXX_073_675_MNT_LAMB93_IGN69.TIF");
 
   //return TestRotation();
   //return TestJP2();

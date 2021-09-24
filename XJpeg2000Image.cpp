@@ -116,7 +116,7 @@ XJpeg2000Image::XJpeg2000Image(const char* filename)
   jpx_metanode root = meta.access_root();
   int count, num_bytes;
   root.count_descendants(count);
-  char text[256];
+  char text[512];
   // Metadonnees XML
   std::string xml;
   for (int i = 0; i < count; i++) {

@@ -14,6 +14,7 @@
 #include "XZlibCodec.h"
 #include "XJpegCodec.h"
 #include "XPackBitsCodec.h"
+#include "XPredictor.h"
 
 //-----------------------------------------------------------------------------
 // Constructeur
@@ -65,8 +66,8 @@ std::string XTiffStripImage::Metadata()
   std::ostringstream out;
   out << XBaseImage::Metadata();
   out << "Nb Strip:" << m_nNbStrip << ";RowsPerStrip:" << m_nRowsPerStrip
-    << ";Compression:" << XTiffReader::CompressionString(m_nCompression)
-    << ";PhotInt:" << XTiffReader::PhotIntString(m_nPhotInt) << ";";
+      << ";Compression:" << XTiffReader::CompressionString(m_nCompression) << ";Predictor:" << m_nPredictor
+      << ";PhotInt:" << XTiffReader::PhotIntString(m_nPhotInt) << ";";
   return out.str();
 }
 
@@ -163,14 +164,18 @@ bool XTiffStripImage::Decompress()
 		XLzwCodec codec;
 		codec.SetDataIO(m_Buffer, m_Strip, m_nRowsPerStrip * m_nW * m_nPixSize);
 		codec.Decompress();
-		Predictor();
+    //Predictor();
+    XPredictor predictor;
+    predictor.Decode(m_Strip, m_nW, m_nRowsPerStrip, m_nPixSize, m_nNbBits, m_nPredictor);
 		return true;
 	}
 	if (m_nCompression == XTiffReader::DEFLATE) {
 		XZlibCodec codec;
 		bool flag = codec.Decompress(m_Buffer, m_StripCounts[m_nLastStrip], m_Strip, m_nW * m_nRowsPerStrip * m_nPixSize);
-		Predictor();
-		return flag;
+    //Predictor();
+    XPredictor predictor;
+    predictor.Decode(m_Strip, m_nW, m_nRowsPerStrip, m_nPixSize, m_nNbBits, m_nPredictor);
+    return flag;
 	}
 	if ((m_nCompression == XTiffReader::JPEG) || (m_nCompression == XTiffReader::JPEGv2)) {
 		XJpegCodec codec;
@@ -189,14 +194,46 @@ bool XTiffStripImage::Decompress()
 //-----------------------------------------------------------------------------
 void XTiffStripImage::Predictor()
 {
-	if (m_nPredictor == 1) return;
-	if (m_nPredictor == 2) {
-		uint32 lineW = m_nW * m_nPixSize;
-		for (uint32 i = 0; i < m_nRowsPerStrip; i++)
-			for (uint32 j = i * lineW; j < (i + 1) * lineW - m_nPixSize; j++)
-				m_Strip[j + m_nPixSize] += m_Strip[j];
-		return;
-	}
+  if (m_nPredictor == 1) return;
+  if (m_nPredictor == 2) {
+    uint32 lineW = m_nW * m_nPixSize;
+    if (m_nNbBits == 8){
+      for (uint32 i = 0; i < m_nRowsPerStrip; i++)
+        for (uint32 j = i * lineW; j < (i + 1) * lineW - m_nPixSize; j++)
+          m_Strip[j + m_nPixSize] += m_Strip[j];
+    }
+    if (m_nNbBits == 32){
+      for (uint32 i = 0; i < m_nRowsPerStrip; i++){
+        uint32* ptr = (uint32*)&m_Strip[lineW*i];
+        for (uint32 j = 0; j < (m_nW - 1); j++) {
+          ptr[1] += ptr[0];
+          ptr++;
+        }
+      }
+    }
+    return;
+  }
+  if (m_nPredictor == 3) { // PREDICTOR_FLOATINGPOINT
+    uint32 lineW = m_nW * m_nPixSize;
+    byte* buf = new byte[lineW];
+    for (uint32 i = 0; i < m_nRowsPerStrip; i++) {
+      for (uint32 j = i * lineW; j < (i + 1) * lineW - m_nPixSize; j++)
+        m_Strip[j + m_nPixSize] += m_Strip[j];
+      std::memcpy(buf, &m_Strip[i * lineW], lineW);
+      byte* ptr_0 = buf;
+      byte* ptr_1 = &buf[m_nW];
+      byte* ptr_2 = &buf[m_nW*2];
+      byte* ptr_3 = &buf[m_nW*3];
+      for (uint32 j = i * lineW; j < (i + 1) * lineW; j += 4) {
+        m_Strip[j] = *ptr_3; ptr_3++;
+        m_Strip[j + 1] = *ptr_2; ptr_2++;
+        m_Strip[j + 2] = *ptr_1; ptr_1++;
+        m_Strip[j + 3] = *ptr_0; ptr_0++;
+      }
+    }
+    delete[] buf;
+    return;
+  }
 }
 
 //-----------------------------------------------------------------------------

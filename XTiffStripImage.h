@@ -18,6 +18,8 @@ public:
 	XTiffStripImage();
 	virtual ~XTiffStripImage() { Clear(); }
 
+	virtual uint32 RowH() { return m_nRowsPerStrip; }		// Renvoie le groupement de ligne optimal pour l'image
+
   virtual std::string Format() { return "TIFF";}
   virtual std::string Metadata();
   bool SetTiffReader(XBaseTiffReader* reader);

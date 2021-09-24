@@ -129,6 +129,82 @@ bool XBaseImage::GetRawPixel(XFile* file, uint32 x, uint32 y, uint32 win, double
 }
 
 //-----------------------------------------------------------------------------
+// Calcul les statistiques de l'image
+//-----------------------------------------------------------------------------
+bool XBaseImage::GetStat(XFile* file, double minVal[4], double maxVal[4], double meanVal[4], uint32 noData[4],
+                         uint16* nb_sample, double no_data)
+{
+  uint32 row = RowH();
+  byte* line = AllocArea(m_nW, row);
+  if (line == NULL)
+    return false;
+  uint32 nbRow = m_nH / row;
+  if ((m_nH % row) != 0) nbRow++;
+  *nb_sample = NbSample();
+  for (uint32 k = 0; k < NbSample(); k++) {
+    noData[k] = 0;
+    meanVal[k] = 0.;
+    if (NbBits() <= 16)
+      maxVal[k] = 0.;
+    else
+      maxVal[k] = -1.e31;
+    if (NbBits() == 8) minVal[k] = 255.;
+    if (NbBits() == 16) minVal[k] = 255. * 255.;
+    if (NbBits() == 32) minVal[k] = 1.e31;
+  }
+  for (uint32 i = 0; i < nbRow; i++) {
+    uint32 rowH = row;
+    if (i == (nbRow - 1)) // derniere bande
+      rowH = (m_nH % row);
+    GetArea(file, 0, i*row, m_nW, rowH, line);
+    if (NbBits() <= 8) {
+      byte* ptr = line;
+      for (uint32 j = 0; j < m_nW * rowH; j++) {
+        for (uint32 k = 0; k < NbSample(); k++) {
+          minVal[k] = XMin(minVal[k], (double)*ptr);
+          maxVal[k] = XMax(maxVal[k], (double)*ptr);
+          meanVal[k] += (double)*ptr;
+          ptr++;
+        }
+      }
+      continue;
+    }
+    if (NbBits() == 16) {
+      uint16* ptr = (uint16*)line;
+      for (uint32 j = 0; j < m_nW * rowH; j++) {
+        for (uint32 k = 0; k < NbSample(); k++) {
+          minVal[k] = XMin(minVal[k], (double)*ptr);
+          maxVal[k] = XMax(maxVal[k], (double)*ptr);
+          meanVal[k] += (double)*ptr;
+          ptr++;
+        }
+      }
+      continue;
+    }
+    if (NbBits() == 32) {
+      float* ptr = (float*)line;
+      for (uint32 j = 0; j < m_nW * rowH; j++) {
+        for (uint32 k = 0; k < NbSample(); k++) {
+          if (*ptr > no_data) {
+            minVal[k] = XMin(minVal[k], (double)*ptr);
+            maxVal[k] = XMax(maxVal[k], (double)*ptr);
+            meanVal[k] += (double)*ptr;
+          }
+          else
+            noData[k] += 1;
+          ptr++;
+        }
+      }
+      continue;
+    }
+  }
+  for (uint32 k = 0; k < NbSample(); k++)
+    meanVal[k] /= XMax((m_nW * m_nH - noData[k]), (uint32)1);
+  delete[] line;
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 // Application d'une palette de couleurs
 //-----------------------------------------------------------------------------
 bool XBaseImage::ApplyColorMap(byte* in, byte* out, uint32 w, uint32 h)

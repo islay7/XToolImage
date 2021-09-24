@@ -18,6 +18,8 @@ public:
 	XTiffTileImage();
 	virtual ~XTiffTileImage() { Clear(); }
 
+	virtual uint32 RowH() { return m_nTileHeight; }		// Renvoie le groupement de ligne optimal pour l'image
+
   virtual std::string Format() { return "TIFF";}
   virtual std::string Metadata();
   bool SetTiffReader(XBaseTiffReader* reader);
@@ -56,6 +58,7 @@ protected:
   static uint32    m_gBufSize;  // Taille du buffer
   static byte*     m_gTile;     // Tile globale
   static uint32    m_gTileSize; // Taille de la tile globale
+  static XTiffTileImage* m_gLastImage;  // Derniere image utilisee
 };
 
 #endif //XTIFFTILEIMAGE_H
